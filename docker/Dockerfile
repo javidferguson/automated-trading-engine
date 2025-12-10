@@ -6,6 +6,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
     zip \
     && apt-get install -y gcc \
+    #&& apt-get install -y g++ \
     && apt-get install -y git \
     && rm -rf /var/lib/apt/lists/*
 #RUN apt-get update && apt-get install -y \
@@ -24,7 +25,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY options-trading-main--TEST.py .
-COPY options-trader-config.yaml .
+COPY config/options-trader-config.yaml /app/config/options-trader-config.yaml
 
 # Create volume mount points
 VOLUME ["/app/logs", "/app/config"]

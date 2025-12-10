@@ -9,11 +9,12 @@ services:
     stdin_open: true  # Enable interactive mode for user input
     tty: true
     volumes:
-      # Mount config for easy editing
-      - ..config/:/app/config/
-      #- /config.yaml:/app/config.yaml
-      # Mount logs directory
-      - ../logs:/app/logs
+      # # Mount config for easy editing
+      # - ../config/:/app/config/
+      # #- /config.yaml:/app/config.yaml
+      # # Mount logs directory
+      # - ../logs:/app/logs
+      - ../:/app
     ports:
       - "7497:7497"
       # - "7496:7496" # PRODUCTION/LIVE Trading -- USE CAREFULLY!

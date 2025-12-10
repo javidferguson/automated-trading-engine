@@ -375,7 +375,8 @@ class OptionsTradingService:
     def _load_config(self, config_path: str) -> TradingConfig:
         """Load configuration from YAML file"""
         with open(config_path, 'r') as f:
-            config_dict = yaml.safe_load(f)
+            # config_dict = yaml.safe_load(f)
+            config_dict = yaml.load(f, Loader=yaml.SafeLoader)
         
         return TradingConfig(**config_dict)
     
@@ -484,7 +485,8 @@ class OptionsTradingService:
 
 async def main():
     """Main entry point"""
-    service = OptionsTradingService('config.yaml')
+    # service = OptionsTradingService('config.yaml')
+    service = OptionsTradingService(OPTIONS_TRADER_CONFIG_FILE_FULL_PATH)
     await service.run()
 
 

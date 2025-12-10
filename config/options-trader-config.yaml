@@ -41,6 +41,6 @@ max_iv_percentile: 70  # Avoid extremely high IV (prefer expanding vol)
 max_trades_per_day: 5
 require_confirmation: true  # Require manual approval before each trade
 
-# Additional filters (can be extended)
-min_volume: 10  # Minimum option volume
-min_open_interest: 50  # Minimum open interest
+## Additional filters (can be extended)
+#min_volume: 10  # Minimum option volume
+#min_open_interest: 50  # Minimum open interest
