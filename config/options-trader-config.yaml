@@ -12,8 +12,10 @@ watchlist:
 historical_days: 60
 
 # Interactive Brokers connection settings
-ib_host: '127.0.0.1'
-ib_port: 7497  # 7497 for paper trading, 7496 for live trading
+# Note: When running in Docker, ib_host will be overridden by environment variable
+ib_host: 'ajj-ib-gateway'  # Docker service name (or '127.0.0.1' for local Gateway)
+ib_port: 4002  # IB Gateway: 4002 for paper, 4001 for live
+               # TWS: 7497 for paper, 7496 for live
 ib_client_id: 1
 
 # Trading mode

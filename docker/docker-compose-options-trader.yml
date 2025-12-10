@@ -1,27 +1,115 @@
 version: '3.8'
 
 services:
+  # IB Gateway Service - Handles connection to Interactive Brokers
+  ajj-ib-gateway:
+    image: ghcr.io/gnzsnz/ib-gateway:latest
+    container_name: ajj-ib-gateway
+    environment:
+      # IB Account Credentials
+      TWS_USERID: ${IB_USERNAME}
+      TWS_PASSWORD: ${IB_PASSWORD}
+
+      # Trading Mode: 'paper' or 'live'
+      TRADING_MODE: ${TRADING_MODE:-paper}
+
+      # VNC Password (optional - for remote desktop access to Gateway UI)
+      VNC_SERVER_PASSWORD: ${VNC_PASSWORD:-vncpassword}
+
+      # API Configuration
+      READ_ONLY_API: "no"
+
+      # Auto-restart configuration (Gateway restarts daily around 11:45 PM ET)
+      RELOGIN_AFTER_TWOFA_TIMEOUT: "yes"
+      TWOFA_TIMEOUT_ACTION: "restart"
+
+    ports:
+      # IB Gateway API Ports
+      - "127.0.0.1:4002:4002"  # Paper trading API
+      - "127.0.0.1:4001:4001"  # Live trading API
+
+      # VNC Port (optional - for debugging/viewing Gateway UI)
+      # Access via VNC client at localhost:5900 or browser at localhost:6080
+      - "127.0.0.1:5900:5900"  # VNC Server
+      - "127.0.0.1:6080:6080"  # noVNC (browser-based VNC)
+
+    restart: unless-stopped
+    networks:
+      - trading-network
+
+    # Health check to ensure Gateway is responding
+    healthcheck:
+      test: ["CMD", "nc", "-zv", "localhost", "4002"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Options Trading Service - Your Python trading application
   ajj-options-trader:
     build:
       context: ../
       dockerfile: docker/Dockerfile
     container_name: ajj-options-trading-service
-    stdin_open: true  # Enable interactive mode for user input
+    stdin_open: true  # Enable interactive CLI
     tty: true
+
+    # Wait for IB Gateway to be ready before starting
+    depends_on:
+      ajj-ib-gateway:
+        condition: service_healthy
+
     volumes:
-      # # Mount config for easy editing
-      # - ../config/:/app/config/
-      # #- /config.yaml:/app/config.yaml
-      # # Mount logs directory
-      # - ../logs:/app/logs
+      # Mount config directory for easy editing
+      - ../config:/app/config
+      # Mount logs directory for persistence
+      - ../logs:/app/logs
+      # Mount data directory for CSV exports
+      - ../data:/app/data
       - ../:/app
-    ports:
-      - "7497:7497"
-      # - "7496:7496" # PRODUCTION/LIVE Trading -- USE CAREFULLY!
+
     environment:
-      # Can override config values via environment
-      - IB_HOST=${IB_HOST:-127.0.0.1}
-      - IB_PORT=${IB_PORT:-7497}
+      # IB Connection Settings (override config.yaml)
+      - IB_HOST=ajj-ib-gateway  # Docker service name
+      - IB_PORT=${IB_PORT:-4002}  # 4002 for paper, 4001 for live
       - PAPER_TRADING=${PAPER_TRADING:-true}
-    network_mode: host  # Required for IB TWS/Gateway connection
+
+      # Optional: Logging level
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+    networks:
+      - trading-network
+
     restart: unless-stopped
+
+networks:
+  trading-network:
+    driver: bridge
+    name: ajj-trading-network
+
+#version: '3.8'
+#
+#services:
+#  ajj-options-trader:
+#    build:
+#      context: ../
+#      dockerfile: docker/Dockerfile
+#    container_name: ajj-options-trading-service
+#    stdin_open: true  # Enable interactive mode for user input
+#    tty: true
+#    volumes:
+#      # # Mount config for easy editing
+#      # - ../config/:/app/config/
+#      # #- /config.yaml:/app/config.yaml
+#      # # Mount logs directory
+#      # - ../logs:/app/logs
+#      - ../:/app
+#    ports:
+#      - "4001:4001" # IB Gateway port (vs. IB TWS 7497-Live | 7496-Paper)
+#    environment:
+#      # Can override config values via environment
+#      - IB_HOST=${IB_HOST:-127.0.0.1}
+#      - IB_PORT=${IB_PORT:-4001}
+#      - PAPER_TRADING=${PAPER_TRADING:-true}
+#    network_mode: host  # Required for IB TWS/Gateway connection
+#    restart: unless-stopped

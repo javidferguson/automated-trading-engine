@@ -1,7 +1,7 @@
 # Options Trading Microservice Dependencies
 
-# Interactive Brokers API
-ib_insync==0.9.86
+# Interactive Brokers API (modern replacement for ib_insync)
+ib_async==2.1.0
 
 # Data analysis
 pandas==2.2.3

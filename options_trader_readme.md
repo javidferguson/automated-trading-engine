@@ -1,8 +1,34 @@
-# Options Trading Microservice with Interactive Brokers
+## Features# Options Trading Microservice with Interactive Brokers
 
 A dockerized Python microservice for analyzing and trading 0DTE options based on Greeks analysis and breakout signals. Uses the modern `ib_async` library (successor to `ib_insync`).
 
-## Features
+## Architecture
+
+### Two-Container System
+
+```
+┌─────────────────────────┐
+│   IB Gateway Container  │  ← Handles IB connection
+│   Port: 4001/4002       │     and authentication
+└───────────┬─────────────┘
+            │
+            │ Docker Network
+            │
+┌───────────▼─────────────┐
+│  Trading App Container  │  ← Your Python code
+│  ajj-options-trader     │     with ib_async
+└─────────────────────────┘
+```
+
+The system uses two separate containers:
+- **IB Gateway**: Manages connection to Interactive Brokers
+- **Trading Application**: Your Python code that analyzes and trades options
+
+This separation provides:
+- ✅ Update trading code without restarting Gateway
+- ✅ Better debugging and monitoring
+- ✅ Gateway can be shared by multiple strategies
+- ✅ Easier maintenance and troubleshooting
 
 - ✅ Real-time options data from Interactive Brokers
 - ✅ Greeks calculation (Gamma, Delta, Vega, Theta, IV)
@@ -40,27 +66,40 @@ cd options-trader
 
 # Create all necessary files (copy the artifacts provided)
 # - main.py
-# - config.yaml
+# - config/options-trader-config.yaml
 # - requirements.txt
 # - Dockerfile
 # - docker-compose.yml
+# - .env (from .env.example)
 ```
 
-### 2. Configure Interactive Brokers
+### 2. Configure Credentials
 
-**In TWS/IB Gateway:**
-1. Go to File → Global Configuration → API → Settings
-2. Enable "Enable ActiveX and Socket Clients"
-3. Add "127.0.0.1" to "Trusted IP Addresses"
-4. Set Socket port to 7497 (paper) or 7496 (live)
-5. Uncheck "Read-Only API"
-6. Click OK and restart TWS/Gateway
+```bash
+# Copy environment template
+cp .env.example .env
 
-### 3. Configure the Service
+# Edit with your IB credentials
+nano .env
+```
 
-Edit `config.yaml`:
+**Required in .env:**
+```bash
+IB_USERNAME=your_username
+IB_PASSWORD=your_password
+TRADING_MODE=paper
+IB_PORT=4002
+```
+
+### 3. Configure Trading Parameters
+
+Edit `config/options-trader-config.yaml`:
 
 ```yaml
+# Connection (already configured for Docker)
+ib_host: 'ib-gateway'  # Docker service name
+ib_port: 4002          # Gateway paper trading port
+
 # Set your watchlist
 watchlist:
   - SPX
@@ -68,7 +107,6 @@ watchlist:
   - QQQ
 
 # Adjust for paper vs live trading
-ib_port: 7497  # 7497 = paper, 7496 = live
 paper_trading: true  # Always start with paper trading!
 
 # Tune your Greeks thresholds
@@ -80,17 +118,20 @@ max_delta: 0.80
 ### 4. Build and Run
 
 ```bash
-# Build the Docker image
-docker-compose build
+# Start IB Gateway first
+docker-compose up -d ib-gateway
 
-# Run the service
-docker-compose up
+# Wait 60 seconds for Gateway to initialize and login
+sleep 60
 
-# Or run in detached mode
-docker-compose up -d
+# Check Gateway is ready
+docker-compose logs ib-gateway | grep "ready"
+
+# Start trading service
+docker-compose up -d ajj-options-trader
 
 # View logs
-docker-compose logs -f
+docker-compose logs -f ajj-options-trader
 ```
 
 ## Usage
@@ -136,13 +177,19 @@ Enter number of contracts: 2
 
 ```bash
 # View real-time logs
-docker-compose logs -f options-trader
+docker-compose logs -f ajj-options-trader
+
+# View Gateway logs
+docker-compose logs -f ib-gateway
 
 # Check trade log file
 cat logs/trading.log
 
+# Access Gateway UI via browser (VNC)
+open http://localhost:6080
+
 # Access container shell
-docker exec -it options-trading-service bash
+docker exec -it ajj-options-trader bash
 ```
 
 ## Configuration Reference
@@ -253,16 +300,23 @@ services:
 ### Connection Issues
 
 **Error: "Connection refused"**
-- Ensure TWS/Gateway is running
-- Check API settings are enabled
-- Verify correct port (7497/7496)
-- Check firewall settings
+- Ensure IB Gateway container is running: `docker-compose ps ib-gateway`
+- Wait 60-90 seconds after starting Gateway
+- Check Gateway logs: `docker-compose logs ib-gateway`
+- Verify credentials in `.env` file
 
 **Error: "Cannot connect to IB"**
 ```bash
-# Test connection
-telnet 127.0.0.1 7497
+# Test connection from trading container
+docker exec ajj-options-trader ping ib-gateway
+docker exec ajj-options-trader nc -zv ib-gateway 4002
 ```
+
+**Wrong port:**
+- IB Gateway Paper: 4002
+- IB Gateway Live: 4001
+- TWS Paper: 7497
+- TWS Live: 7496
 
 ### Data Issues
 
