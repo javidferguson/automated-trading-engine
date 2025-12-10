@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  ajj-options-trader:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+    container_name: ajj-options-trading-service
+    stdin_open: true  # Enable interactive mode for user input
+    tty: true
+    volumes:
+      # Mount config for easy editing
+      - ..config/:/app/config/
+      #- /config.yaml:/app/config.yaml
+      # Mount logs directory
+      - ../logs:/app/logs
+    ports:
+      - "7497:7497"
+      # - "7496:7496" # PRODUCTION/LIVE Trading -- USE CAREFULLY!
+    environment:
+      # Can override config values via environment
+      - IB_HOST=${IB_HOST:-127.0.0.1}
+      - IB_PORT=${IB_PORT:-7497}
+      - PAPER_TRADING=${PAPER_TRADING:-true}
+    network_mode: host  # Required for IB TWS/Gateway connection
+    restart: unless-stopped

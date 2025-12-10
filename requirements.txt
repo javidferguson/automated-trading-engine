@@ -1,0 +1,23 @@
+# Options Trading Microservice Dependencies
+
+# Interactive Brokers API
+ib_insync==0.9.86
+
+# Data analysis
+pandas==2.2.0
+numpy==1.26.3
+
+# Configuration
+PyYAML==6.0.1
+
+# Async support
+asyncio==3.4.3
+
+# Logging
+python-json-logger==2.0.7
+
+# Optional: For additional financial calculations
+scipy==1.12.0
+
+# Optional: For enhanced data handling
+pytz==2024.1

@@ -1,0 +1,46 @@
+# Options Trading Microservice Configuration
+
+# Watchlist - symbols to monitor for 0DTE options
+watchlist:
+  - SPX
+  # - SPY
+  # - QQQ
+  # - AAPL
+  # - TSLA
+
+# Historical data parameters
+historical_days: 60
+
+# Interactive Brokers connection settings
+ib_host: '127.0.0.1'
+ib_port: 7497  # 7497 for paper trading, 7496 for live trading
+ib_client_id: 1
+
+# Trading mode
+paper_trading: true  # Set to false for live trading
+
+# Greeks thresholds for breakout detection
+# Gamma: measures rate of change in delta
+min_gamma: 0.05  # Higher gamma = more sensitive to price moves
+
+# Delta: directional exposure (-1 to 1)
+min_delta: 0.20  # Minimum directional exposure
+max_delta: 0.80  # Maximum (favor OTM options for breakouts)
+
+# Vega: sensitivity to volatility changes
+min_vega: 0.10  # Higher vega = benefits from vol expansion
+
+# Theta: time decay (negative value)
+min_theta: -0.50  # Less aggressive time decay
+
+# IV Percentile: where current IV ranks historically
+min_iv_percentile: 30  # Avoid extremely low IV
+max_iv_percentile: 70  # Avoid extremely high IV (prefer expanding vol)
+
+# Risk management
+max_trades_per_day: 5
+require_confirmation: true  # Require manual approval before each trade
+
+# Additional filters (can be extended)
+min_volume: 10  # Minimum option volume
+min_open_interest: 50  # Minimum open interest
