@@ -75,17 +75,8 @@ max_delta: 0.80
 ### 4. Build and Run
 
 ```bash
-# Build the Docker image
-docker-compose build
-
-# Run the service
-docker-compose up
-
-# Or run in detached mode
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
+# Build and run the Docker image
+make trades-dev
 ```
 
 ## Usage
@@ -131,13 +122,13 @@ Enter number of contracts: 2
 
 ```bash
 # View real-time logs
-docker-compose logs -f options-trader
+docker-compose logs -f ajj-options-trader
 
 # Check trade log file
 cat logs/trading.log
 
 # Access container shell
-docker exec -it options-trading-service bash
+docker exec -it ajj-options-trading-service bash
 ```
 
 ## Configuration Reference
@@ -188,7 +179,7 @@ Use cron inside container:
 RUN apt-get install -y cron
 
 # Create cron job
-CMD cron && python main.py
+CMD cron && python options-trading-main--TEST.py
 ```
 
 Or use external scheduler:
