@@ -3,7 +3,7 @@
 
 # Variables
 COMPOSE_FILE := docker/docker-compose-options-trader.yml
-GATEWAY_SERVICE := ib-gateway
+GATEWAY_SERVICE := ajj-ib-gateway
 TRADER_SERVICE := ajj-options-trader
 GATEWAY_WAIT_TIME := 60
 

@@ -5,6 +5,8 @@ services:
   ajj-ib-gateway:
     image: ghcr.io/gnzsnz/ib-gateway:latest
     container_name: ajj-ib-gateway
+    env_file:
+      - ../.env.jf.dev
     environment:
       # IB Account Credentials
       TWS_USERID: ${IB_USERNAME}
@@ -51,6 +53,8 @@ services:
       context: ../
       dockerfile: docker/Dockerfile
     container_name: ajj-options-trading-service
+    env_file:
+      - ../.env.jf.dev
     stdin_open: true  # Enable interactive CLI
     tty: true
 
