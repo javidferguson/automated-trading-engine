@@ -8,6 +8,7 @@ RUN apt-get update \
     && apt-get install -y gcc \
     #&& apt-get install -y g++ \
     && apt-get install -y git \
+    && apt-get install -y iputils-ping \
     && rm -rf /var/lib/apt/lists/*
 #RUN apt-get update && apt-get install -y \
 #    gcc \

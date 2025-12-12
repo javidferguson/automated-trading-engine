@@ -1,3 +1,6 @@
+# include env file
+include	.env.jf.dev
+export
 # Makefile for Options Trading Microservice
 # Two-container setup: IB Gateway + Trading Application
 
@@ -99,8 +102,8 @@ gateway-check: ## Check if Gateway is ready
 	@docker-compose -f $(COMPOSE_FILE) ps $(GATEWAY_SERVICE) | grep "Up" > /dev/null && \
 		echo "$(GREEN)✓ Gateway container is running$(NC)" || \
 		(echo "$(RED)✗ Gateway container is not running$(NC)" && exit 1)
-	@docker-compose -f $(COMPOSE_FILE) exec -T $(GATEWAY_SERVICE) nc -zv localhost 4002 2>&1 | grep succeeded > /dev/null && \
-		echo "$(GREEN)✓ Gateway API is responding on port 4002$(NC)" || \
+	@docker-compose -f $(COMPOSE_FILE) exec -T $(GATEWAY_SERVICE) nc -zv localhost 4004 2>&1 | grep succeeded > /dev/null && \
+		echo "$(GREEN)✓ Gateway API is responding on port 4004$(NC)" || \
 		echo "$(YELLOW)⚠ Gateway API not ready yet (may need more time)$(NC)"
 
 .PHONY: gateway-vnc
@@ -196,8 +199,8 @@ test-connection: ## Test connection from trader to gateway
 	@docker-compose -f $(COMPOSE_FILE) exec -T $(TRADER_SERVICE) ping -c 3 $(GATEWAY_SERVICE) && \
 		echo "$(GREEN)✓ Network connectivity OK$(NC)" || \
 		echo "$(RED)✗ Network connectivity failed$(NC)"
-	@docker-compose -f $(COMPOSE_FILE) exec -T $(TRADER_SERVICE) nc -zv $(GATEWAY_SERVICE) 4002 && \
-		echo "$(GREEN)✓ Gateway API reachable on port 4002$(NC)" || \
+	@docker-compose -f $(COMPOSE_FILE) exec -T $(TRADER_SERVICE) nc -zv $(GATEWAY_SERVICE) 4004 && \
+		echo "$(GREEN)✓ Gateway API reachable on port 4004$(NC)" || \
 		echo "$(RED)✗ Gateway API not reachable$(NC)"
 
 .PHONY: debug-gateway
@@ -337,7 +340,7 @@ quick-restart: ## Quick restart of trading app only (keeps Gateway running)
 setup: ## First-time setup wizard
 	@echo "$(GREEN)🚀 Options Trading Microservice Setup$(NC)"
 	@echo ""
-	@test -f .env || (echo "$(YELLOW)Creating .env file from template...$(NC)" && cp .env.example .env)
+	@test -f .env || (echo "$(YELLOW)Creating .env file from template...$(NC)" && cp example.env .env)
 	@echo "$(YELLOW)Please edit .env with your IB credentials:$(NC)"
 	@echo "  - IB_USERNAME"
 	@echo "  - IB_PASSWORD"

@@ -12,9 +12,12 @@ from typing import List, Dict, Optional
 import pandas as pd
 import numpy as np
 from dataclasses import dataclass
-from ib_async import IB, Stock, Option, MarketOrder, LimitOrder, util
+from ib_async import IB, Stock, Option, MarketOrder, LimitOrder, util, Forex
 import yaml
-from pathlib import Path
+# from dotenv import load_dotenv
+# from pathlib import Path
+#
+# load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -70,13 +73,24 @@ class OptionsDataFetcher:
         expiration_days=0 means 0DTE options
         """
         try:
-            # Create stock contract
+            # ib = IB()
+            # await ib.connectAsync('127.0.0.1', 4004, clientId=1)
+            ## Define a basic contract object
+            # contract = Forex('EURUSD')
+
+            # # Create stock contract
             stock = Stock(symbol, 'SMART', 'USD')
-            self.ib.qualifyContracts(stock)
+            # qual_contract = await self.ib.qualifyContractsAsync(stock)
+            # # qual_contract = self.ib.qualifyContracts(contract)
+            # logging.info(f"Qualifying contract: {qual_contract}")
+            stock_list = await self.ib.qualifyContractsAsync(stock)
+
+            logger.info(f"Fetching option chains for {stock_list}")
 
             # Get option chains
             chains = self.ib.reqSecDefOptParams(
-                stock.symbol, '', stock.secType, stock.conId
+                #stock.symbol, '', stock.secType, stock.conId
+                stock_list[0].symbol, '', stock_list[0].secType, stock_list[0].conId
             )
 
             if not chains:

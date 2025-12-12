@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # IB Gateway Service - Handles connection to Interactive Brokers
   ajj-ib-gateway:
@@ -9,26 +7,32 @@ services:
       - ../.env.jf.dev
     environment:
       # IB Account Credentials
-      TWS_USERID: ${IB_USERNAME}
-      TWS_PASSWORD: ${IB_PASSWORD}
+      - TWS_USERID=${IB_USERNAME}
+      - TWS_PASSWORD=${IB_PASSWORD}
 
       # Trading Mode: 'paper' or 'live'
-      TRADING_MODE: ${TRADING_MODE:-paper}
+      - TRADING_MODE=${TRADING_MODE:-paper}
 
       # VNC Password (optional - for remote desktop access to Gateway UI)
-      VNC_SERVER_PASSWORD: ${VNC_PASSWORD:-vncpassword}
+#      - VNC_SERVER_PASSWORD=${VNC_PASSWORD:-vncpassword}
+      - IBC_HEADLESS=true
 
       # API Configuration
-      READ_ONLY_API: "no"
+      #READ_ONLY_API: "no"
+      - READ_ONLY_API=no
 
       # Auto-restart configuration (Gateway restarts daily around 11:45 PM ET)
-      RELOGIN_AFTER_TWOFA_TIMEOUT: "yes"
-      TWOFA_TIMEOUT_ACTION: "restart"
+      - RELOGIN_AFTER_TWOFA_TIMEOUT=yes
+      - TWOFA_TIMEOUT_ACTION=restart
 
     ports:
+      # # IB Gateway API Ports
+      # - "127.0.0.1:4002:4002"  # Paper trading API
+      # - "127.0.0.1:4001:4001"  # Live trading API
+
       # IB Gateway API Ports
-      - "127.0.0.1:4002:4002"  # Paper trading API
-      - "127.0.0.1:4001:4001"  # Live trading API
+      - "127.0.0.1:4002:4004"  # Paper trading API
+      - "127.0.0.1:4001:4003"  # Live trading API
 
       # VNC Port (optional - for debugging/viewing Gateway UI)
       # Access via VNC client at localhost:5900 or browser at localhost:6080
@@ -52,7 +56,8 @@ services:
     build:
       context: ../
       dockerfile: docker/Dockerfile
-    container_name: ajj-options-trading-service
+    #container_name: ajj-options-trading-service
+    container_name: ajj-options-trader
     env_file:
       - ../.env.jf.dev
     stdin_open: true  # Enable interactive CLI
@@ -61,7 +66,8 @@ services:
     # Wait for IB Gateway to be ready before starting
     depends_on:
       ajj-ib-gateway:
-        condition: service_healthy
+        #condition: service_healthy
+        condition: service_started
 
     volumes:
       # Mount config directory for easy editing
@@ -75,7 +81,7 @@ services:
     environment:
       # IB Connection Settings (override config.yaml)
       - IB_HOST=ajj-ib-gateway  # Docker service name
-      - IB_PORT=${IB_PORT:-4002}  # 4002 for paper, 4001 for live
+      - IB_PORT=${IB_PORT:-4004}  # 4002 for paper, 4001 for live
       - PAPER_TRADING=${PAPER_TRADING:-true}
 
       # Optional: Logging level
@@ -89,7 +95,7 @@ services:
 networks:
   trading-network:
     driver: bridge
-    name: ajj-trading-network
+    name: trading-network
 
 #version: '3.8'
 #

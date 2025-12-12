@@ -2,11 +2,11 @@
 
 # Watchlist - symbols to monitor for 0DTE options
 watchlist:
-  - SPX
+  #- SPX
   # - SPY
   # - QQQ
-  # - AAPL
-  # - TSLA
+   - AAPL
+   - TSLA
 
 # Historical data parameters
 historical_days: 60
@@ -14,7 +14,7 @@ historical_days: 60
 # Interactive Brokers connection settings
 # Note: When running in Docker, ib_host will be overridden by environment variable
 ib_host: 'ajj-ib-gateway'  # Docker service name (or '127.0.0.1' for local Gateway)
-ib_port: 4002  # IB Gateway: 4002 for paper, 4001 for live
+ib_port: 4004  # IB Gateway: 4002 for paper, 4001 for live
                # TWS: 7497 for paper, 7496 for live
 ib_client_id: 1
 
