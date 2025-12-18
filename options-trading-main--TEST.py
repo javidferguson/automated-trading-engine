@@ -131,12 +131,13 @@ class OptionsDataFetcher:
                 # ticker = self.ib.reqMktData(stock)
                 # # ticker = self.ib.reqMktData(stock, '', False, False, [])
                 # HISTORICAL DATA - TESTING/using without paid market data subscription
-                bar_data = self.ib.reqHistoricalData(stock, f"20251215 11:00:00 US/Eastern", "1 D", "1 hour", "TRADES",1, 1, False, [])
+                bar_data = self.ib.reqHistoricalData(stock, f"20251218 20:00:00 US/Eastern", "1 D", "1 hour", "TRADES",1, 1, False, [])
                 await asyncio.sleep(5)  # Wait for price data
 
                 logging.info(f"Here is the TICKER INFO: {bar_data}")
 
                 df_qualified = util.df(bar_data)  # pd.DataFrame.from_records(qualified)
+                df_qualified.to_csv("df_qualified_output.csv", index=False)
                 logging.info(f"df_qualified: \n {df_qualified.head(n=10)}")
 
                 # if not ticker.last or np.isnan(ticker.last):
@@ -166,7 +167,8 @@ class OptionsDataFetcher:
                         # logging.info(f"Strike >>> [{strike}]")
                         option = Option(
                             symbol, expiration, strike, right,
-                            chain.exchange, tradingClass=chain.tradingClass
+                            # chain.exchange, tradingClass=chain.tradingClass
+                            "SMART", tradingClass=chain.tradingClass
                             # , secType="OPT"
                             # # , secType=chain.secType
                         )
@@ -174,7 +176,22 @@ class OptionsDataFetcher:
                         # logging.info(f"Option: [ {option} ]")
                         options.append(option)
 
+            # # Assuming 'qualified_contracts_list' contains multiple contracts
+            # target_exchange = 'NYSE'
+            # # Filter the list using list comprehension
+            # filtered_list = [
+            #     c for c in qualified_contracts_list if c.primaryExchange == target_exchange
+            # ]
+            # # Use the desired contract from the filtered results
+            # if filtered_list:
+            #     selected_contract = filtered_list[0]
+            #     print(f"Selected contract on {target_exchange}: {selected_contract}")
+            # else:
+            #     print(f"No contract found for {target_exchange}")
+
+
             df_options = util.df(options)
+            df_options.to_csv("df_options_output.csv", index=False)
             logging.info(f"df_options: \n {df_options.info(verbose=True)}")
             logging.info(f"df_options: \n {df_options.head(n=10)}")
 
@@ -197,6 +214,7 @@ class OptionsDataFetcher:
             try:
                 # # Request market data with Greeks
                 # self.ib.reqMktData(option, '', False, False)
+                # self.ib.reqMktData(option_contract_asset, '', False, False)
                 self.ib.reqHistoricalData(option_contract_asset, f"20251215 11:00:00 US/Eastern", "1 D", "1 hour", "TRADES",1, 1, False, [])
                 await asyncio.sleep(0.5)  # Rate limiting
 
@@ -236,6 +254,7 @@ class OptionsDataFetcher:
                 continue
 
         df = util.df(data)
+        df.to_csv("options_greek_output.csv", index=False)
         logging.info(f"Options greeks output -->>> {df.info(verbose=True)}")
         logging.info(f"Options greeks output -->>> {df.head(n=10)}")
         logger.info(f"Collected data for {len(df)} options")
