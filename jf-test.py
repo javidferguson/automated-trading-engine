@@ -5,7 +5,6 @@ Uses ib_async library (modern replacement for ib_insync)
 """
 
 import asyncio
-import nest_asyncio
 import logging
 import os
 from datetime import datetime, timedelta
@@ -19,8 +18,6 @@ import yaml
 # from pathlib import Path
 #
 # load_dotenv()
-
-nest_asyncio.apply()
 
 # Configure logging
 logging.basicConfig(
@@ -78,8 +75,6 @@ class OptionsDataFetcher:
         try:
             # ib = IB()
             # await ib.connectAsync('127.0.0.1', 4004, clientId=1)
-            # await ib.connectAsync('127.0.0.1', 4002, clientId=1)
-            # ib.connect('127.0.0.1', 4002, clientId=1)
             ## Define a basic contract object
             # contract = Forex('EURUSD')
 
@@ -94,15 +89,9 @@ class OptionsDataFetcher:
 
             # Get option chains
             chains = self.ib.reqSecDefOptParams(
-                stock.symbol, '', stock.secType, stock.conId
-                # stock.symbol, '', 'STK', stock.conId
-                # stock_list[0].symbol, '', stock_list[0].secType, stock_list[0].conId
-                # stock_list[0].symbol, '', 'FUT', stock_list[0].conId
+                #stock.symbol, '', stock.secType, stock.conId
+                stock_list[0].symbol, '', stock_list[0].secType, stock_list[0].conId
             )
-
-            # logging.info(f"Found option chains for {chains}")
-            df_chains = util.df(chains)
-            logging.info(f"Fetched option chains for {df_chains.head(n=10)}")
 
             if not chains:
                 logger.warning(f"No option chains found for {symbol}")
@@ -110,13 +99,9 @@ class OptionsDataFetcher:
 
             # Filter for desired expiration
             target_date = datetime.now().date() + timedelta(days=expiration_days)
-            logger.info(f"Fetching option chains for date: [{target_date}]")
 
             options = []
             for chain in chains:
-
-                logging.info(f"Starting FETCH for [{chain.exchange}] option chains for [[ {chain.tradingClass} ]]")
-
                 # Filter expirations
                 expirations = [exp for exp in chain.expirations
                              if abs((datetime.strptime(exp, '%Y%m%d').date() - target_date).days) <= 1]
@@ -127,62 +112,31 @@ class OptionsDataFetcher:
                 expiration = expirations[0]
 
                 # Get strikes around current price
-                # LIVE DATA
-                # ticker = self.ib.reqMktData(stock)
-                # # ticker = self.ib.reqMktData(stock, '', False, False, [])
-                # HISTORICAL DATA - TESTING/using without paid market data subscription
-                bar_data = self.ib.reqHistoricalData(stock, f"20251215 11:00:00 US/Eastern", "1 D", "1 hour", "TRADES",1, 1, False, [])
-                await asyncio.sleep(5)  # Wait for price data
+                ticker = self.ib.reqMktData(stock)
+                await asyncio.sleep(2)  # Wait for price data
 
-                logging.info(f"Here is the TICKER INFO: {bar_data}")
-
-                df_qualified = util.df(bar_data)  # pd.DataFrame.from_records(qualified)
-                logging.info(f"df_qualified: \n {df_qualified.head(n=10)}")
-
-                # if not ticker.last or np.isnan(ticker.last):
-                #     continue
-                #
-                # current_price = ticker.last
-
-                if not bar_data[0].close or np.isnan(bar_data[0].close):
+                if not ticker.last or np.isnan(ticker.last):
                     continue
 
-                # current_price = bar_data.last
-                current_price = bar_data[0].close
-                open_price = bar_data[0].open
-                low_price = bar_data[0].low
-                high_price = bar_data[0].high
+                current_price = ticker.last
 
                 # Select strikes within 10% of current price
                 strikes = [s for s in chain.strikes
-                          # if current_price * 0.9 <= s <= current_price * 1.1]
-                           if current_price * 0.9 <= s <= current_price * 1.1]
-
-                # logging.info(f"Strikes: {strikes}")
+                          if current_price * 0.9 <= s <= current_price * 1.1]
 
                 # Create option contracts (both calls and puts)
                 for strike in strikes[:10]:  # Limit to 10 strikes
                     for right in ['C', 'P']:
-                        # logging.info(f"Strike >>> [{strike}]")
                         option = Option(
                             symbol, expiration, strike, right,
                             chain.exchange, tradingClass=chain.tradingClass
-                            # , secType="OPT"
-                            # # , secType=chain.secType
                         )
-                        # logging.info(f"Fetching option chain for strike: [{strike}]")
-                        # logging.info(f"Option: [ {option} ]")
                         options.append(option)
-
-            df_options = util.df(options)
-            logging.info(f"df_options: \n {df_options.info(verbose=True)}")
-            logging.info(f"df_options: \n {df_options.head(n=10)}")
 
             # Qualify contracts
             qualified = self.ib.qualifyContracts(*options)
             logger.info(f"Found {len(qualified)} options for {symbol}")
-            # logging.info(f"Qualified Output: [{qualified}]")
-            #
+
             return qualified
 
         except Exception as e:
@@ -193,15 +147,13 @@ class OptionsDataFetcher:
         """Fetch market data and Greeks for options"""
         data = []
 
-        for option_contract_asset in options:
+        for option in options:
             try:
-                # # Request market data with Greeks
-                # self.ib.reqMktData(option, '', False, False)
-                self.ib.reqHistoricalData(option_contract_asset, f"20251215 11:00:00 US/Eastern", "1 D", "1 hour", "TRADES",1, 1, False, [])
+                # Request market data with Greeks
+                self.ib.reqMktData(option, '', False, False)
                 await asyncio.sleep(0.5)  # Rate limiting
 
-                # ticker = self.ib.ticker(option)
-                ticker = self.ib.ticker(option_contract_asset)
+                ticker = self.ib.ticker(option)
 
                 # Wait for Greeks to populate
                 for _ in range(10):
@@ -215,10 +167,10 @@ class OptionsDataFetcher:
                 greeks = ticker.modelGreeks
 
                 data.append({
-                    'symbol': option_contract_asset.symbol,
-                    'expiration': option_contract_asset.lastTradeDateOrContractMonth,
-                    'strike': option_contract_asset.strike,
-                    'right': option_contract_asset.right,
+                    'symbol': option.symbol,
+                    'expiration': option.lastTradeDateOrContractMonth,
+                    'strike': option.strike,
+                    'right': option.right,
                     'bid': ticker.bid if ticker.bid and not np.isnan(ticker.bid) else 0,
                     'ask': ticker.ask if ticker.ask and not np.isnan(ticker.ask) else 0,
                     'last': ticker.last if ticker.last and not np.isnan(ticker.last) else 0,
@@ -228,16 +180,14 @@ class OptionsDataFetcher:
                     'vega': greeks.vega,
                     'theta': greeks.theta,
                     'impl_vol': greeks.impliedVol if greeks.impliedVol else 0,
-                    'contract': option_contract_asset
+                    'contract': option
                 })
 
             except Exception as e:
-                logger.error(f"Error getting data for {option_contract_asset}: {e}")
+                logger.error(f"Error getting data for {option}: {e}")
                 continue
 
-        df = util.df(data)
-        logging.info(f"Options greeks output -->>> {df.info(verbose=True)}")
-        logging.info(f"Options greeks output -->>> {df.head(n=10)}")
+        df = pd.DataFrame(data)
         logger.info(f"Collected data for {len(df)} options")
 
         return df
