@@ -1,5 +1,5 @@
 # include env file
-include	.env.jf.dev
+include	.env*
 export
 # Makefile for Options Trading Microservice
 # Two-container setup: IB Gateway + Trading Application
@@ -339,14 +339,14 @@ quick-restart: ## Quick restart of trading app only (keeps Gateway running)
 .PHONY: setup
 setup: ## First-time setup wizard
 	@echo "$(GREEN)🚀 Options Trading Microservice Setup$(NC)"
-	@echo ""
-	@test -f .env || (echo "$(YELLOW)Creating .env file from template...$(NC)" && cp example.env .env)
-	@echo "$(YELLOW)Please edit .env with your IB credentials:$(NC)"
-	@echo "  - IB_USERNAME"
-	@echo "  - IB_PASSWORD"
-	@echo "  - TRADING_MODE (paper/live)"
-	@read -p "Press Enter to open .env in editor..." && $${EDITOR:-nano} .env
-	@echo ""
+	 @echo ""
+	 @test -f .env.local || (echo "$(YELLOW)Creating .env file from template...$(NC)" && cp example.env .env.local)
+	 @echo "$(YELLOW)Please edit .env with your IB credentials:$(NC)"
+	 @echo "  - IB_USERNAME"
+	 @echo "  - IB_PASSWORD"
+	 @echo "  - TRADING_MODE (paper/live)"
+	 @read -p "Press Enter to open .env in editor..." && $${EDITOR:-nano} .env
+	 @echo ""
 	@echo "$(GREEN)Pulling IB Gateway image...$(NC)"
 	@$(MAKE) build-gateway
 	@echo ""

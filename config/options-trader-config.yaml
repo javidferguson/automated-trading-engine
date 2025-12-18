@@ -2,14 +2,14 @@
 
 # Watchlist - symbols to monitor for 0DTE options
 watchlist:
-  #- SPX
-  # - SPY
-  # - QQQ
-   - AAPL
-   - TSLA
+#   - SPX
+   - SPY
+#   - QQQ
+#   - AAPL
+#   - TSLA
 
 # Historical data parameters
-historical_days: 60
+historical_days: 2
 
 # Interactive Brokers connection settings
 # Note: When running in Docker, ib_host will be overridden by environment variable
