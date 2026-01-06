@@ -516,3 +516,10 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
+
+    # Get the [HIGH] and [LOW] for [config:Lookbackperiod]
+    # MONITOR() --> BreakoutAnalyzer
+        # WHEN - a [candle] closes
+            # Look to see if the price is OUTSIDE the RANGE
+        # IF - outside the range
+        # DO - GEX calculation
