@@ -86,3 +86,63 @@ def test_out_of_window_bars_do_not_affect_levels(orb):
     orb.add_bar(bar_at(9, 40, high=105, low=99))
     high, low = orb.calculate_levels()
     assert (high, low) == (105, 99)
+
+
+# ------------------------------------------------------- timezone handling
+#
+# Regression cover for a bug the fake-IB engine test could not catch: it
+# returned naive 09:30 timestamps, i.e. the already-correct case. In reality the
+# Gateway image defaults to Etc/UTC, so IB stamps a 09:30 ET bar as 13:30 and
+# every bar fell outside the window -- an empty range and a silent shutdown.
+
+from zoneinfo import ZoneInfo
+
+UTC = ZoneInfo("UTC")
+ET = ZoneInfo("America/New_York")
+
+
+def aware_bar(dt, high=101.0, low=99.0):
+    return Bar(timestamp=dt, open=100.0, high=high, low=low, close=100.0, volume=1000)
+
+
+def test_utc_aware_bars_are_converted_to_exchange_time(orb):
+    """13:30 UTC is 09:30 ET in August, so it belongs in the opening range."""
+    assert orb.add_bar(aware_bar(datetime(2026, 8, 26, 13, 30, tzinfo=UTC))) is True
+
+
+def test_utc_aware_bars_outside_the_window_are_still_rejected(orb):
+    """14:00 UTC is 10:00 ET -- the first bar after the range."""
+    assert orb.add_bar(aware_bar(datetime(2026, 8, 26, 14, 0, tzinfo=UTC))) is False
+
+
+def test_levels_are_correct_from_utc_aware_bars(orb):
+    for dt, hi, lo in [
+        (datetime(2026, 8, 26, 13, 30, tzinfo=UTC), 105, 99),
+        (datetime(2026, 8, 26, 13, 45, tzinfo=UTC), 110, 101),
+        (datetime(2026, 8, 26, 13, 59, tzinfo=UTC), 109, 98),
+    ]:
+        orb.add_bar(aware_bar(dt, high=hi, low=lo))
+    assert orb.calculate_levels() == (110, 98)
+
+
+def test_exchange_aware_bars_work_too(orb):
+    assert orb.add_bar(aware_bar(datetime(2026, 8, 26, 9, 30, tzinfo=ET))) is True
+
+
+def test_naive_bars_are_treated_as_exchange_local(orb):
+    """What TIME_ZONE on the Gateway container guarantees."""
+    assert orb.add_bar(aware_bar(datetime(2026, 8, 26, 9, 30))) is True
+
+
+def test_dst_boundary_is_handled(orb):
+    """In January, 09:30 ET is 14:30 UTC rather than 13:30."""
+    assert orb.add_bar(aware_bar(datetime(2026, 1, 15, 14, 30, tzinfo=UTC))) is True
+    assert orb.add_bar(aware_bar(datetime(2026, 1, 15, 13, 30, tzinfo=UTC))) is False
+
+
+def test_rejected_count_tracks_out_of_window_bars(orb):
+    """Feeds the timezone-mismatch diagnostic in calculate_levels()."""
+    for hour in (13, 14, 15):
+        orb.add_bar(aware_bar(datetime(2026, 8, 26, hour, 0)))  # naive, so UTC-looking
+    assert orb.rejected == 3
+    assert orb.calculate_levels() == (None, None)
