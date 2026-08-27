@@ -3,21 +3,30 @@
 # Interactive Brokers API (modern replacement for ib_insync)
 ib_async==2.1.0
 
+# Required by the trading engine to run ib_async inside an already-running loop
+nest_asyncio==1.6.0
+
 # Data analysis
 pandas==2.2.3
 numpy==2.3.4
 
 # Configuration
 PyYAML==6.0.1
+pydantic==2.10.6
 
-# Async support
-asyncio==3.4.3
+# NOTE: do NOT add `asyncio` here. The PyPI package named `asyncio` is an
+# abandoned 3.4-era backport that shadows the stdlib module on modern Python.
+# asyncio ships with Python.
 
 # Logging
 python-json-logger==2.0.7
 
-# Optional: For additional financial calculations
+# Financial calculations
 scipy==1.15.0
 
-# Optional: For enhanced data handling
+# Timezone handling
 pytz==2024.1
+
+# Testing
+pytest==8.3.4
+pytest-mock==3.14.0

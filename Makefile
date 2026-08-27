@@ -1,11 +1,18 @@
 # include env file
-include	.env*
+#
+# The leading '-' matters: plain `include .env*` is a FATAL error when no file
+# matches, which silently breaks EVERY target in this file. The real env file
+# (.env.jf.dev) is gitignored, so a fresh clone has none until you run
+# `make setup` or `cp example.env .env.jf.dev`.
+-include .env*
 export
 # Makefile for Options Trading Microservice
 # Two-container setup: IB Gateway + Trading Application
 
 # Variables
 COMPOSE_FILE := docker/docker-compose-options-trader.yml
+# Must match the env_file: entry in the compose file.
+ENV_FILE := .env.jf.dev
 GATEWAY_SERVICE := ajj-ib-gateway
 TRADER_SERVICE := ajj-options-trader
 GATEWAY_WAIT_TIME := 60
@@ -20,7 +27,7 @@ NC := \033[0m # No Color
 help: ## Show this help message
 	@echo "$(GREEN)Options Trading Microservice - Available Commands$(NC)"
 	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(firstword $(MAKEFILE_LIST)) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 
 # =============================================================================
@@ -190,6 +197,37 @@ status: ## Show detailed status of all services
 	@docker-compose -f $(COMPOSE_FILE) logs --tail=10
 
 # =============================================================================
+# ORB + GEX Engine
+# =============================================================================
+
+.PHONY: orb-replay
+orb-replay: ## Replay a past session through the engine (no orders, no subscription)
+	@echo "$(GREEN)Replaying a past session through the ORB+GEX engine...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) run --rm -e DATA_MODE=replay $(TRADER_SERVICE) \
+		python -m trading_engine.main --data-mode replay
+
+.PHONY: orb-delayed
+orb-delayed: ## Run against live-but-delayed data (observation only, no subscription)
+	@echo "$(YELLOW)Delayed data lags ~15 min -- observation only.$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) run --rm -e DATA_MODE=delayed $(TRADER_SERVICE) \
+		python -m trading_engine.main --data-mode delayed
+
+.PHONY: orb-live
+orb-live: ## Run against real-time bars (REQUIRES a paid IB market data subscription)
+	@echo "$(RED)Real-time mode: orders can be placed (paper account, confirmation required).$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) run --rm -e DATA_MODE=realtime $(TRADER_SERVICE) \
+		python -m trading_engine.main --data-mode realtime
+
+.PHONY: test
+test: ## Run the test suite in the trader container
+	@docker-compose -f $(COMPOSE_FILE) run --rm $(TRADER_SERVICE) \
+		sh -c "pip install -q pytest pytest-asyncio pytest-mock && python -m pytest tests -q"
+
+.PHONY: test-local
+test-local: ## Run the test suite on the host (uses .venv)
+	@.venv/bin/python -m pytest tests -q
+
+# =============================================================================
 # Testing & Debug Commands
 # =============================================================================
 
@@ -294,18 +332,21 @@ clean-all: clean clean-images ## Full cleanup (containers, volumes, images)
 .PHONY: config-check
 config-check: ## Validate configuration files
 	@echo "$(GREEN)Checking configuration...$(NC)"
-	@test -f .env && echo "$(GREEN)✓ .env file exists$(NC)" || echo "$(RED)✗ .env file missing$(NC)"
-	@test -f config/options-trader-config.yaml && echo "$(GREEN)✓ config.yaml exists$(NC)" || echo "$(RED)✗ config.yaml missing$(NC)"
-	@grep -q "IB_USERNAME" .env && echo "$(GREEN)✓ IB_USERNAME set$(NC)" || echo "$(RED)✗ IB_USERNAME not set$(NC)"
-	@grep -q "IB_PASSWORD" .env && echo "$(GREEN)✓ IB_PASSWORD set$(NC)" || echo "$(RED)✗ IB_PASSWORD not set$(NC)"
+	@test -f $(ENV_FILE) && echo "$(GREEN)✓ $(ENV_FILE) exists$(NC)" || echo "$(RED)✗ $(ENV_FILE) missing (run: make setup)$(NC)"
+	@test -f config/options-trader-config.yaml && echo "$(GREEN)✓ options-trader-config.yaml exists$(NC)" || echo "$(RED)✗ options-trader-config.yaml missing$(NC)"
+	@test -f config/orb-gamma-config.yaml && echo "$(GREEN)✓ orb-gamma-config.yaml exists$(NC)" || echo "$(RED)✗ orb-gamma-config.yaml missing$(NC)"
+	@grep -q "^IB_USERNAME=" $(ENV_FILE) 2>/dev/null && echo "$(GREEN)✓ IB_USERNAME set$(NC)" || echo "$(RED)✗ IB_USERNAME not set$(NC)"
+	@grep -q "^IB_PASSWORD=" $(ENV_FILE) 2>/dev/null && echo "$(GREEN)✓ IB_PASSWORD set$(NC)" || echo "$(RED)✗ IB_PASSWORD not set$(NC)"
+	@grep -qE "^IB_USERNAME=your_username|^IB_PASSWORD=your_password" $(ENV_FILE) 2>/dev/null && echo "$(YELLOW)⚠ $(ENV_FILE) still has template placeholders -- edit it$(NC)" || true
+	@echo "$(YELLOW)DATA_MODE:$(NC) $${DATA_MODE:-replay}  $(YELLOW)TRADING_MODE:$(NC) $${TRADING_MODE:-paper}"
 
 .PHONY: config-edit
 config-edit: ## Open config file in editor
 	@$${EDITOR:-nano} config/options-trader-config.yaml
 
 .PHONY: env-edit
-env-edit: ## Open .env file in editor
-	@$${EDITOR:-nano} .env
+env-edit: ## Open the env file in editor
+	@$${EDITOR:-nano} $(ENV_FILE)
 
 # =============================================================================
 # Quick Workflow Commands
@@ -340,12 +381,13 @@ quick-restart: ## Quick restart of trading app only (keeps Gateway running)
 setup: ## First-time setup wizard
 	@echo "$(GREEN)🚀 Options Trading Microservice Setup$(NC)"
 	 @echo ""
-	 @test -f .env.local || (echo "$(YELLOW)Creating .env file from template...$(NC)" && cp example.env .env.local)
-	 @echo "$(YELLOW)Please edit .env with your IB credentials:$(NC)"
+	 @test -f $(ENV_FILE) || (echo "$(YELLOW)Creating $(ENV_FILE) from template...$(NC)" && cp example.env $(ENV_FILE))
+	 @echo "$(YELLOW)Please edit $(ENV_FILE) with your IB credentials:$(NC)"
 	 @echo "  - IB_USERNAME"
 	 @echo "  - IB_PASSWORD"
-	 @echo "  - TRADING_MODE (paper/live)"
-	 @read -p "Press Enter to open .env in editor..." && $${EDITOR:-nano} .env
+	 @echo "  - TRADING_MODE (paper/live)  -- which ACCOUNT the Gateway logs into"
+	 @echo "  - DATA_MODE (realtime/delayed/replay)  -- where BARS come from"
+	 @read -p "Press Enter to open $(ENV_FILE) in editor..." && $${EDITOR:-nano} $(ENV_FILE)
 	 @echo ""
 	@echo "$(GREEN)Pulling IB Gateway image...$(NC)"
 	@$(MAKE) build-gateway

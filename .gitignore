@@ -206,3 +206,13 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Trading engine runtime artefacts (directories are tracked via .gitkeep)
+logs/*
+!logs/.gitkeep
+data/*
+!data/.gitkeep
+!data/journal/
+data/journal/*
+!data/journal/.gitkeep
+backups/

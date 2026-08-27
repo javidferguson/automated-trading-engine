@@ -9,12 +9,15 @@ import nest_asyncio
 import logging
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import List, Dict, Optional
 import pandas as pd
 import numpy as np
-from dataclasses import dataclass
-from ib_async import IB, Stock, Option, MarketOrder, LimitOrder, util, Forex
+from dataclasses import dataclass, fields
+from ib_async import IB, Stock, Option, MarketOrder, util
 import yaml
+
+from ...execution.safety import assert_paper_account
 # from dotenv import load_dotenv
 # from pathlib import Path
 #
@@ -131,7 +134,11 @@ class OptionsDataFetcher:
                 # ticker = self.ib.reqMktData(stock)
                 # # ticker = self.ib.reqMktData(stock, '', False, False, [])
                 # HISTORICAL DATA - TESTING/using without paid market data subscription
-                bar_data = self.ib.reqHistoricalData(stock, f"20251215 11:00:00 US/Eastern", "1 D", "1 hour", "TRADES",1, 1, False, [])
+                # "" means "now". This was previously pinned to a hardcoded
+                # 2025-12-15 timestamp, so every scan priced off that one date.
+                bar_data = self.ib.reqHistoricalData(
+                    stock, "", "1 D", "1 hour", "TRADES", 1, 1, False, []
+                )
                 await asyncio.sleep(5)  # Wait for price data
 
                 logging.info(f"Here is the TICKER INFO: {bar_data}")
@@ -149,9 +156,6 @@ class OptionsDataFetcher:
 
                 # current_price = bar_data.last
                 current_price = bar_data[0].close
-                open_price = bar_data[0].open
-                low_price = bar_data[0].low
-                high_price = bar_data[0].high
 
                 # Select strikes within 10% of current price
                 strikes = [s for s in chain.strikes
@@ -195,13 +199,16 @@ class OptionsDataFetcher:
 
         for option_contract_asset in options:
             try:
-                # # Request market data with Greeks
-                # self.ib.reqMktData(option, '', False, False)
-                self.ib.reqHistoricalData(option_contract_asset, f"20251215 11:00:00 US/Eastern", "1 D", "1 hour", "TRADES",1, 1, False, [])
+                # modelGreeks is populated by reqMktData ONLY. The previous
+                # version requested historical bars here and then read
+                # ticker.modelGreeks, which reqHistoricalData never sets -- so
+                # every contract fell through to `continue` and this method
+                # returned nothing, every run, silently.
+                #
+                # No market-data subscription is needed: reqMarketDataType(3) is
+                # set at connect time, which yields delayed greeks.
+                ticker = self.ib.reqMktData(option_contract_asset, '', False, False)
                 await asyncio.sleep(0.5)  # Rate limiting
-
-                # ticker = self.ib.ticker(option)
-                ticker = self.ib.ticker(option_contract_asset)
 
                 # Wait for Greeks to populate
                 for _ in range(10):
@@ -235,10 +242,23 @@ class OptionsDataFetcher:
                 logger.error(f"Error getting data for {option_contract_asset}: {e}")
                 continue
 
-        df = util.df(data)
-        logging.info(f"Options greeks output -->>> {df.info(verbose=True)}")
-        logging.info(f"Options greeks output -->>> {df.head(n=10)}")
+        if not data:
+            logger.warning(
+                "No options returned Greeks. With reqMarketDataType(3) this usually "
+                "means the market is closed or the contracts did not qualify."
+            )
+            return pd.DataFrame()
+
+        df = pd.DataFrame(data)
         logger.info(f"Collected data for {len(df)} options")
+        logger.debug("Greeks sample:\n%s", df.head(n=10))
+
+        # Release the streaming subscriptions we opened above.
+        for option_contract_asset in options:
+            try:
+                self.ib.cancelMktData(option_contract_asset)
+            except Exception:  # noqa: BLE001 - cleanup must not mask the result
+                pass
 
         return df
 
@@ -259,12 +279,12 @@ class OptionsDataFetcher:
             )
 
             if not bars:
-                return {'iv_percentile': 50, 'current_iv': 0}
+                return {'iv_unavailable': True, 'current_iv': 0}
 
             ivs = [bar.close for bar in bars if bar.close > 0]
 
             if not ivs:
-                return {'iv_percentile': 50, 'current_iv': 0}
+                return {'iv_unavailable': True, 'current_iv': 0}
 
             current_iv = ivs[-1]
             percentile = (sum(1 for iv in ivs if iv < current_iv) / len(ivs)) * 100
@@ -277,7 +297,7 @@ class OptionsDataFetcher:
 
         except Exception as e:
             logger.error(f"Error calculating historical IV for {symbol}: {e}")
-            return {'iv_percentile': 50, 'current_iv': 0}
+            return {'iv_unavailable': True, 'current_iv': 0}
 
 
 class BreakoutAnalyzer:
@@ -297,28 +317,46 @@ class BreakoutAnalyzer:
         # Calculate mid price
         df['mid_price'] = (df['bid'] + df['ask']) / 2
 
-        # Filter by Greeks thresholds
+        # Filter by Greeks thresholds.
+        #
+        # theta: the config comment and README both say "less aggressive time
+        # decay", but the original filter was `df['theta'] <= min_theta`, which
+        # with min_theta = -0.50 keeps only the options decaying FASTER than
+        # -0.50 -- the exact opposite. Inverted to match the documented intent.
         signals = df[
             (df['gamma'].abs() >= self.config.min_gamma) &
             (df['delta'].abs() >= self.config.min_delta) &
             (df['delta'].abs() <= self.config.max_delta) &
             (df['vega'].abs() >= self.config.min_vega) &
-            (df['theta'] <= self.config.min_theta) &
+            (df['theta'] >= self.config.min_theta) &
             (df['volume'] > 0) &
             (df['mid_price'] > 0)
-        ]
+        ].copy()
 
         # ----------------------------------------------------------------------- #
         # WRITE dataframe to local for review
         # ----------------------------------------------------------------------- #
         if not signals.empty:
             file_timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            signals.to_csv(f"daily_signals_data_{file_timestamp}.csv", index=False)
-            logger.info(f"Saved signals data to daily_signals_data_{file_timestamp}.csv")
+            # data/ is the bind-mounted volume that `make backup-signals` and
+            # `make clean-signals` look in. The original wrote to the CWD, so
+            # those targets never found a file.
+            out_dir = Path("data")
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_path = out_dir / f"daily_signals_data_{file_timestamp}.csv"
+            signals.to_csv(out_path, index=False)
+            logger.info(f"Saved signals data to {out_path}")
         # ----------------------------------------------------------------------- #
 
-        # IV filter
-        current_iv_pct = iv_data.get('iv_percentile', 50)
+        # IV filter -- evaluated BEFORE writing the CSV, since it vetoes the
+        # whole symbol. A failed IV lookup now blocks rather than passing: the
+        # original returned a default of 50, which sits inside the 30-70 window,
+        # making a data failure indistinguishable from a genuine pass.
+        if iv_data.get('iv_unavailable'):
+            logger.warning("IV percentile unavailable; skipping symbol rather than assuming 50.")
+            return pd.DataFrame()
+
+        current_iv_pct = iv_data.get('iv_percentile')
         if not (self.config.min_iv_percentile <= current_iv_pct <= self.config.max_iv_percentile):
             logger.info(f"IV percentile {current_iv_pct:.1f} outside target range")
             return pd.DataFrame()
@@ -327,13 +365,25 @@ class BreakoutAnalyzer:
             logger.info("No options meet breakout criteria")
             return signals
 
-        # Calculate breakout score (weighted combination of Greeks)
+        # Score: each term normalised to 0-1 before weighting.
+        #
+        # The original summed raw greeks against a volume term capped at 10:
+        # gamma.abs() * 40 is about 2 for a typical gamma of 0.05, so ranking was
+        # dominated by volume rather than by the greeks it claimed to weigh.
+        # It also ADDED theta.abs() * 10, rewarding the fastest-decaying options
+        # while the docs said the opposite.
+        def _norm(series):
+            span = series.max() - series.min()
+            if span == 0 or pd.isna(span):
+                return pd.Series(0.5, index=series.index)
+            return (series - series.min()) / span
+
         signals['breakout_score'] = (
-            signals['gamma'].abs() * 40 +
-            (1 - signals['delta'].abs()) * 20 +  # Favor OTM options
-            signals['vega'].abs() * 20 +
-            signals['theta'].abs() * 10 +
-            signals['volume'] / signals['volume'].max() * 10
+            _norm(signals['gamma'].abs()) * 40 +
+            (1 - signals['delta'].abs()) * 20 +          # favour OTM
+            _norm(signals['vega'].abs()) * 20 +
+            _norm(-signals['theta'].abs()) * 10 +        # less decay scores higher
+            _norm(signals['volume']) * 10
         )
 
         # Sort by score
@@ -363,7 +413,7 @@ class TradeExecutor:
         print(f"Strike: ${trade_info['strike']:.2f}")
         print(f"Expiration: {trade_info['expiration']}")
         print(f"Mid Price: ${trade_info['mid_price']:.2f}")
-        print(f"\nGreeks:")
+        print("\nGreeks:")
         print(f"  Delta: {trade_info['delta']:.4f}")
         print(f"  Gamma: {trade_info['gamma']:.4f}")
         print(f"  Vega: {trade_info['vega']:.4f}")
@@ -372,17 +422,34 @@ class TradeExecutor:
         print(f"\nBreakout Score: {trade_info['breakout_score']:.2f}")
         print("="*60)
 
-        if not self.config.require_confirmation:
-            contracts = int(input("\nEnter number of contracts (0 to skip): "))
-            return True, contracts
+        # This gate used to be inverted: `if not require_confirmation` prompted
+        # for a size and returned True unconditionally, so setting the flag to
+        # false did not skip confirmation -- and setting it to true still let a
+        # non-numeric entry raise ValueError up into the symbol loop, silently
+        # skipping the symbol. Confirmation is now mandatory and guarded.
+        symbol = str(trade_info['symbol']).upper()
+        try:
+            answer = input(f"\nType {symbol} to place this order, or anything else to skip: ").strip().upper()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            logger.warning("No interactive input available; declining the trade.")
+            return False, 0
 
-        response = input("\nExecute this trade? (yes/no): ").strip().lower()
+        if answer != symbol:
+            logger.info("Trade declined (entered %r, expected %r)", answer, symbol)
+            return False, 0
 
-        if response == 'yes':
-            contracts = int(input("Enter number of contracts: "))
-            return True, contracts
+        try:
+            contracts = int(input("Enter number of contracts (0 to skip): ").strip())
+        except (ValueError, EOFError, KeyboardInterrupt):
+            print()
+            logger.warning("Invalid contract count; declining the trade.")
+            return False, 0
 
-        return False, 0
+        if contracts <= 0:
+            return False, 0
+
+        return True, contracts
 
     async def execute_trade(self, option: Option, quantity: int, trade_info: Dict) -> Optional[str]:
         """Execute option trade"""
@@ -443,9 +510,23 @@ class OptionsTradingService:
     def _load_config(self, config_path: str) -> TradingConfig:
         """Load configuration from YAML file"""
         with open(config_path, 'r') as f:
-            config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+            config_dict = yaml.load(f, Loader=yaml.SafeLoader) or {}
 
-        return TradingConfig(**config_dict)
+        # TradingConfig(**config_dict) raises TypeError on any key it does not
+        # declare, so a single new YAML entry would break startup. Filter to the
+        # declared fields and say plainly what was ignored or missing.
+        known = {f.name for f in fields(TradingConfig)}
+        unknown = set(config_dict) - known
+        if unknown:
+            logger.warning("Ignoring unknown config keys: %s", ", ".join(sorted(unknown)))
+
+        missing = known - set(config_dict)
+        if missing:
+            raise ValueError(
+                f"{config_path} is missing required keys: {', '.join(sorted(missing))}"
+            )
+
+        return TradingConfig(**{k: v for k, v in config_dict.items() if k in known})
 
     async def connect(self):
         """Connect to Interactive Brokers"""
@@ -462,16 +543,28 @@ class OptionsTradingService:
                 clientId=self.config.ib_client_id
             )
 
+            # Delayed market data (type 3). Greeks arrive ~15 minutes late but
+            # require no paid subscription, which is what this scanner assumes.
+            self.ib.reqMarketDataType(3)
+
+            # paper_trading was previously only ever printed. Assert it instead:
+            # the port is not a safety guarantee, managedAccounts() is.
+            accounts = assert_paper_account(self.ib, config_is_paper=self.config.paper_trading)
+
             logger.info(f"✓ Connected to IB Gateway at {ib_host}:{ib_port}")
-            logger.info(f"Trading Mode: {'PAPER' if self.config.paper_trading else 'LIVE'}")
+            logger.info(f"Account(s): {', '.join(accounts)} (PAPER)")
 
             self.fetcher = OptionsDataFetcher(self.ib, self.config)
             self.analyzer = BreakoutAnalyzer(self.config)
             self.executor = TradeExecutor(self.ib, self.config)
 
         except Exception as e:
+            # ib_host/ib_port are resolved inside the try, so referencing them
+            # here can raise UnboundLocalError and mask the real error.
+            host = os.getenv('IB_HOST', self.config.ib_host)
+            port = os.getenv('IB_PORT', self.config.ib_port)
             logger.error(f"Failed to connect to IB Gateway: {e}")
-            logger.error(f"Make sure IB Gateway is running and accessible at {ib_host}:{ib_port}")
+            logger.error(f"Make sure IB Gateway is running and accessible at {host}:{port}")
             raise
 
     async def scan_and_trade(self):
