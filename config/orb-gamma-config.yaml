@@ -76,7 +76,7 @@ data:
   # no need to comment either out.
 
   replay:
-    date: "2026-08-26"      # YYYY-MM-DD, a past RTH session
+    date: "2026-08-27"      # YYYY-MM-DD, a past RTH session
     bar_size: "30 secs"     # historical bar size fed through the aggregator
     speed: 0                # seconds to sleep between bars (0 = as fast as possible)
     #
@@ -115,5 +115,5 @@ trade_execution:
   quantity: 1                    # contracts per trade
   max_quantity: 5                # hard cap; refuses anything larger
   take_profit_percentage: 0.20   # +20% on the option premium
-  stop_loss_percentage: 0.30     # -30% on the option premium
+  stop_loss_percentage: 0.15     # -30% on the option premium
   require_confirmation: true     # ALWAYS true on this path. Enforced in code.
