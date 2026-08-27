@@ -34,28 +34,6 @@ help: ## Show this help message
 # Development Commands
 # =============================================================================
 
-.PHONY: trades-dev
-trades-dev: ## Build and run trading app in development mode (interactive)
-	@echo "$(GREEN)Starting development environment...$(NC)"
-	@$(MAKE) gateway-start
-	@echo "$(YELLOW)Waiting $(GATEWAY_WAIT_TIME)s for Gateway to initialize...$(NC)"
-	@sleep $(GATEWAY_WAIT_TIME)
-	@$(MAKE) gateway-check
-	@echo "$(GREEN)Building and starting trading application...$(NC)"
-	@docker-compose -f $(COMPOSE_FILE) build $(TRADER_SERVICE)
-	@docker-compose -f $(COMPOSE_FILE) run --service-ports --rm $(TRADER_SERVICE)
-
-.PHONY: trades-dev-quick
-trades-dev-quick: ## Run trading app without rebuilding (assumes Gateway running)
-	@echo "$(GREEN)Starting trading application (no rebuild)...$(NC)"
-	@docker-compose -f $(COMPOSE_FILE) run --service-ports --rm $(TRADER_SERVICE)
-
-.PHONY: trades-dev-rebuild
-trades-dev-rebuild: ## Force rebuild and run trading app
-	@echo "$(GREEN)Force rebuilding trading application...$(NC)"
-	@docker-compose -f $(COMPOSE_FILE) build --no-cache $(TRADER_SERVICE)
-	@docker-compose -f $(COMPOSE_FILE) run --service-ports --rm $(TRADER_SERVICE)
-
 # =============================================================================
 # Production/Daemon Commands
 # =============================================================================
@@ -239,7 +217,11 @@ test: ## Run the test suite in the trader container
 		sh -c "pip install -q pytest pytest-asyncio pytest-mock && python -m pytest tests -q"
 
 .PHONY: test-local
-test-local: ## Run the test suite on the host (uses .venv)
+test-local: ## Run the test suite on the host (needs a local venv)
+	@test -x .venv/bin/python || \
+		(echo "$(RED)✗ No .venv here.$(NC)"; \
+		 echo "  Create one:  python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"; \
+		 echo "  Or run the suite in the container:  make test"; exit 1)
 	@.venv/bin/python -m pytest tests -q
 
 # =============================================================================
@@ -288,13 +270,6 @@ debug-trader: ## Show detailed trader debug info
 # Data Management Commands
 # =============================================================================
 
-.PHONY: backup-signals
-backup-signals: ## Backup signal CSV files
-	@echo "$(GREEN)Backing up signal files...$(NC)"
-	@mkdir -p backups/$$(date +%Y%m%d)
-	@cp -v data/daily_signals_*.csv backups/$$(date +%Y%m%d)/ 2>/dev/null || echo "$(YELLOW)No signal files to backup$(NC)"
-	@echo "$(GREEN)Backup complete: backups/$$(date +%Y%m%d)$(NC)"
-
 .PHONY: backup-logs
 backup-logs: ## Backup log files
 	@echo "$(GREEN)Backing up log files...$(NC)"
@@ -303,19 +278,13 @@ backup-logs: ## Backup log files
 	@echo "$(GREEN)Backup complete: backups/$$(date +%Y%m%d)$(NC)"
 
 .PHONY: backup-all
-backup-all: backup-signals backup-logs ## Backup all data files
+backup-all: backup-logs ## Backup all data files
 
 .PHONY: clean-logs
 clean-logs: ## Clean old log files (keeps last 7 days)
 	@echo "$(YELLOW)Cleaning old log files...$(NC)"
 	@find logs -name "*.log" -mtime +7 -delete 2>/dev/null || true
 	@echo "$(GREEN)Log cleanup complete$(NC)"
-
-.PHONY: clean-signals
-clean-signals: ## Clean old signal files (keeps last 30 days)
-	@echo "$(YELLOW)Cleaning old signal files...$(NC)"
-	@find data -name "daily_signals_*.csv" -mtime +30 -delete 2>/dev/null || true
-	@echo "$(GREEN)Signal cleanup complete$(NC)"
 
 # =============================================================================
 # Cleanup Commands
@@ -350,7 +319,6 @@ clean-all: clean clean-images ## Full cleanup (containers, volumes, images)
 config-check: ## Validate configuration files
 	@echo "$(GREEN)Checking configuration...$(NC)"
 	@test -f $(ENV_FILE) && echo "$(GREEN)✓ $(ENV_FILE) exists$(NC)" || echo "$(RED)✗ $(ENV_FILE) missing (run: make setup)$(NC)"
-	@test -f config/options-trader-config.yaml && echo "$(GREEN)✓ options-trader-config.yaml exists$(NC)" || echo "$(RED)✗ options-trader-config.yaml missing$(NC)"
 	@test -f config/orb-gamma-config.yaml && echo "$(GREEN)✓ orb-gamma-config.yaml exists$(NC)" || echo "$(RED)✗ orb-gamma-config.yaml missing$(NC)"
 	@grep -q "^IB_USERNAME=" $(ENV_FILE) 2>/dev/null && echo "$(GREEN)✓ IB_USERNAME set$(NC)" || echo "$(RED)✗ IB_USERNAME not set$(NC)"
 	@grep -q "^IB_PASSWORD=" $(ENV_FILE) 2>/dev/null && echo "$(GREEN)✓ IB_PASSWORD set$(NC)" || echo "$(RED)✗ IB_PASSWORD not set$(NC)"
@@ -359,7 +327,7 @@ config-check: ## Validate configuration files
 
 .PHONY: config-edit
 config-edit: ## Open config file in editor
-	@$${EDITOR:-nano} config/options-trader-config.yaml
+	@$${EDITOR:-nano} config/orb-gamma-config.yaml
 
 .PHONY: env-edit
 env-edit: ## Open the env file in editor
@@ -412,7 +380,8 @@ setup: ## First-time setup wizard
 	@echo "$(GREEN)Building trading application...$(NC)"
 	@$(MAKE) build-trader
 	@echo ""
-	@echo "$(GREEN)✓ Setup complete! Use 'make trades-dev' to start trading.$(NC)"
+	@echo "$(GREEN)✓ Setup complete.$(NC)"
+	@echo "$(YELLOW)Next: make gateway-start && make gateway-vnc, then make orb-replay$(NC)"
 
 # =============================================================================
 # Default target
@@ -420,8 +389,3 @@ setup: ## First-time setup wizard
 
 .DEFAULT_GOAL := help
 
-
-# Makes a local environment
-# trades-dev:
-# 	docker-compose -f docker/docker-compose-options-trader.yml build && \
-# 	docker-compose -f docker/docker-compose-options-trader.yml run --service-ports --rm ajj-options-trader
