@@ -14,8 +14,20 @@ services:
       # Trading Mode: 'paper' or 'live'
       - TRADING_MODE=${TRADING_MODE:-paper}
 
-      # VNC Password (optional - for remote desktop access to Gateway UI)
-#      - VNC_SERVER_PASSWORD=${VNC_PASSWORD:-vncpassword}
+      # VNC / noVNC access to the Gateway UI.
+      #
+      # The image starts x11vnc and noVNC ONLY when VNC_SERVER_PASSWORD is set.
+      # With it unset, ports 5900/6080 are published but nothing listens inside
+      # the container, so http://localhost:6080 fails with "didn't send any
+      # data" -- and you have no way to see a login dialog that is waiting for
+      # input, which is exactly when you need it most.
+      #
+      # Set VNC_PASSWORD in .env.jf.dev to enable. Both ports are bound to
+      # 127.0.0.1 only, so they are not exposed beyond this machine.
+      - VNC_SERVER_PASSWORD=${VNC_PASSWORD:-}
+
+      # Headless IBC: no IBC control window. This does NOT disable VNC -- the
+      # Gateway UI itself is still rendered on the virtual display.
       - IBC_HEADLESS=true
 
       # API Configuration

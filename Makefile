@@ -123,6 +123,14 @@ gateway-check: ## Check if Gateway is ready
 
 .PHONY: gateway-vnc
 gateway-vnc: ## Open Gateway UI in browser (noVNC)
+	@grep -qE "^VNC_PASSWORD=.+" $(ENV_FILE) 2>/dev/null || \
+		(echo "$(RED)✗ VNC_PASSWORD is not set in $(ENV_FILE).$(NC)"; \
+		 echo "  The container only starts its VNC server when that is set, so"; \
+		 echo "  localhost:6080 will fail with 'didn't send any data'."; \
+		 echo "  Set it, then: make gateway-restart"; exit 1)
+	@docker-compose -f $(COMPOSE_FILE) exec -T $(GATEWAY_SERVICE) \
+		bash -c "echo > /dev/tcp/127.0.0.1/6080" 2>/dev/null || \
+		echo "$(YELLOW)⚠ noVNC not listening yet -- give it a few seconds after start.$(NC)"
 	@echo "$(GREEN)Opening Gateway UI in browser...$(NC)"
 	@echo "$(YELLOW)If browser doesn't open, visit: http://localhost:6080$(NC)"
 	@open http://localhost:6080 2>/dev/null || xdg-open http://localhost:6080 2>/dev/null || \
