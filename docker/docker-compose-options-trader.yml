@@ -63,7 +63,14 @@ services:
 
     # Health check to ensure Gateway is responding
     healthcheck:
-      test: ["CMD", "nc", "-zv", "localhost", "4004"]  # socat paper port (what clients connect to)
+      # Two things this must NOT do:
+      #   1. Use `nc` -- it is not installed in the gnzsnz image, so the check
+      #      errors out and the container is permanently "unhealthy".
+      #   2. Probe 4004 -- that is socat, which listens from container start
+      #      whether or not IB Gateway is up, so it reports healthy while the
+      #      Gateway is still on the login screen.
+      # Probe the Gateway's own port instead, with bash, which is present.
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/4002"]
       interval: 30s
       timeout: 10s
       retries: 3

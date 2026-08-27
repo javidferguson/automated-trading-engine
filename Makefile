@@ -109,9 +109,17 @@ gateway-check: ## Check if Gateway is ready
 	@docker-compose -f $(COMPOSE_FILE) ps $(GATEWAY_SERVICE) | grep "Up" > /dev/null && \
 		echo "$(GREEN)✓ Gateway container is running$(NC)" || \
 		(echo "$(RED)✗ Gateway container is not running$(NC)" && exit 1)
-	@docker-compose -f $(COMPOSE_FILE) exec -T $(GATEWAY_SERVICE) nc -zv localhost 4004 2>&1 | grep succeeded > /dev/null && \
-		echo "$(GREEN)✓ Gateway API is responding on port 4004$(NC)" || \
-		echo "$(YELLOW)⚠ Gateway API not ready yet (may need more time)$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) exec -T $(GATEWAY_SERVICE) \
+		bash -c "echo > /dev/tcp/127.0.0.1/4002" 2>/dev/null && \
+		echo "$(GREEN)✓ IB Gateway is logged in and listening (4002)$(NC)" || \
+		(echo "$(YELLOW)⚠ Gateway is running but NOT logged in yet.$(NC)"; \
+		 echo "  Login can take 60-90s. If it stays this way, look at the screen:"; \
+		 echo "    make gateway-vnc      # opens http://localhost:6080"; \
+		 echo "  A dialog waiting for input (2FA, warning, or config) will be visible there.")
+	@docker-compose -f $(COMPOSE_FILE) exec -T $(GATEWAY_SERVICE) \
+		bash -c "echo > /dev/tcp/127.0.0.1/4004" 2>/dev/null && \
+		echo "$(GREEN)✓ socat relay is listening (4004)$(NC)" || \
+		echo "$(RED)✗ socat relay is not listening on 4004$(NC)"
 
 .PHONY: gateway-vnc
 gateway-vnc: ## Open Gateway UI in browser (noVNC)
@@ -238,8 +246,10 @@ test-connection: ## Test connection from trader to gateway
 		echo "$(GREEN)✓ Network connectivity OK$(NC)" || \
 		echo "$(RED)✗ Network connectivity failed$(NC)"
 	@docker-compose -f $(COMPOSE_FILE) exec -T $(TRADER_SERVICE) nc -zv $(GATEWAY_SERVICE) 4004 && \
-		echo "$(GREEN)✓ Gateway API reachable on port 4004$(NC)" || \
-		echo "$(RED)✗ Gateway API not reachable$(NC)"
+		echo "$(GREEN)✓ socat relay reachable on 4004$(NC)" || \
+		echo "$(RED)✗ socat relay not reachable$(NC)"
+	@echo "$(YELLOW)Note: reaching 4004 only proves socat is up. Use 'make gateway-check'$(NC)"
+	@echo "$(YELLOW)to confirm IB Gateway itself has finished logging in.$(NC)"
 
 .PHONY: debug-gateway
 debug-gateway: ## Show detailed Gateway debug info
