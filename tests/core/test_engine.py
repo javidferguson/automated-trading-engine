@@ -278,3 +278,53 @@ async def test_replayed_gex_is_flagged_when_not_point_in_time(engine):
     assert engine.gex is not None
     assert engine.gex.as_of == SESSION
     assert engine.gex.point_in_time is True  # fake chain still has the session's expiry
+
+
+# ------------------------------------------------------ data config shape
+
+def test_nested_data_config_is_read():
+    from trading_engine.config import DataConfig
+
+    cfg = DataConfig.model_validate({
+        "mode": "delayed",
+        "replay": {"date": "2026-08-26", "bar_size": "1 min"},
+        "delayed": {"bar_size": "5 secs", "poll_seconds": 10},
+    })
+    assert cfg.mode.value == "delayed"
+    assert cfg.replay.bar_size == "1 min"
+    assert cfg.delayed.bar_size == "5 secs"
+    assert cfg.delayed.poll_seconds == 10
+
+
+def test_legacy_flat_keys_still_work():
+    """An existing config must not silently lose its settings."""
+    from trading_engine.config import DataConfig
+
+    cfg = DataConfig.model_validate({
+        "mode": "replay",
+        "replay_date": "2026-08-26",
+        "replay_bar_size": "1 min",
+        "delayed_poll_seconds": 15,
+    })
+    assert str(cfg.replay.date) == "2026-08-26"
+    assert cfg.replay.bar_size == "1 min"
+    assert cfg.delayed.poll_seconds == 15
+
+
+def test_nested_wins_over_legacy_when_both_present():
+    from trading_engine.config import DataConfig
+
+    cfg = DataConfig.model_validate({
+        "mode": "replay",
+        "replay_bar_size": "1 min",
+        "replay": {"bar_size": "5 secs"},
+    })
+    assert cfg.replay.bar_size == "5 secs"
+
+
+def test_both_sections_exist_regardless_of_mode():
+    """Switching modes must not require editing the other section."""
+    from trading_engine.config import DataConfig
+
+    cfg = DataConfig.model_validate({"mode": "realtime"})
+    assert cfg.replay is not None and cfg.delayed is not None

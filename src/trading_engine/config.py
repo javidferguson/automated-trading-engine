@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import logging
 import os
+import datetime as dt
 from datetime import date, time
 from pathlib import Path
 from typing import Optional
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .models import DataMode
 
@@ -60,18 +61,35 @@ class BreakoutConfig(BaseModel):
     bar_size_seconds: int = 300
 
 
+class ReplayConfig(BaseModel):
+    """Settings used when mode == replay."""
+
+    # dt.date, not date: a field named `date` shadows the imported name inside
+    # the class body, so `Optional[date]` would resolve to the field itself.
+    date: Optional[dt.date] = None
+    bar_size: str = "30 secs"
+    speed: float = 0.0
+
+
+class DelayedConfig(BaseModel):
+    """Settings used when mode == delayed."""
+
+    bar_size: str = "30 secs"
+    lookback: str = "1800 S"
+    poll_seconds: float = 30.0
+
+
 class DataConfig(BaseModel):
+    """Where price bars come from.
+
+    `mode` selects which of the sub-sections below applies. Both are always
+    present; the unused one is simply ignored, so there is no need to edit them
+    when switching modes.
+    """
+
     mode: DataMode = DataMode.REPLAY
-
-    # DATA_MODE=replay
-    replay_date: Optional[date] = None
-    replay_bar_size: str = "30 secs"
-    replay_speed: float = 0.0
-
-    # DATA_MODE=delayed
-    delayed_bar_size: str = "30 secs"
-    delayed_lookback: str = "1800 S"
-    delayed_poll_seconds: float = 30.0
+    replay: ReplayConfig = Field(default_factory=ReplayConfig)
+    delayed: DelayedConfig = Field(default_factory=DelayedConfig)
 
     @field_validator("mode", mode="before")
     @classmethod
@@ -79,6 +97,44 @@ class DataConfig(BaseModel):
         if isinstance(v, str):
             return v.strip().lower()
         return v
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_legacy_flat_keys(cls, values):
+        """Fold the old flat keys into the nested sections.
+
+        The original layout put `replay_date` and `delayed_bar_size` as flat
+        siblings of `mode`, which read as though the delayed keys only applied
+        once you had set `mode: delayed`. Nesting makes the relationship
+        obvious; this keeps an existing config working rather than silently
+        dropping its settings.
+        """
+        if not isinstance(values, dict):
+            return values
+        legacy = {
+            "replay_date": ("replay", "date"),
+            "replay_bar_size": ("replay", "bar_size"),
+            "replay_speed": ("replay", "speed"),
+            "delayed_bar_size": ("delayed", "bar_size"),
+            "delayed_lookback": ("delayed", "lookback"),
+            "delayed_poll_seconds": ("delayed", "poll_seconds"),
+        }
+        found = []
+        for flat, (section, key) in legacy.items():
+            if flat in values:
+                found.append(flat)
+                values.setdefault(section, {})
+                if isinstance(values[section], dict):
+                    values[section].setdefault(key, values.pop(flat))
+                else:
+                    values.pop(flat)
+        if found:
+            logger.warning(
+                "config data: flat keys %s are deprecated; move them under "
+                "data.replay / data.delayed.",
+                ", ".join(sorted(found)),
+            )
+        return values
 
 
 class GEXConfig(BaseModel):
@@ -141,7 +197,7 @@ def _apply_env_overrides(raw: dict) -> dict:
     if mode := os.getenv("DATA_MODE"):
         data["mode"] = mode.strip().lower()
     if replay_date := os.getenv("REPLAY_DATE"):
-        data["replay_date"] = replay_date
+        data.setdefault("replay", {})["date"] = replay_date
 
     # PAPER_TRADING is about the ACCOUNT, never about the data source.
     if paper := os.getenv("PAPER_TRADING"):

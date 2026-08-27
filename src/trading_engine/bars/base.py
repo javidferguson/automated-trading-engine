@@ -82,12 +82,12 @@ def make_bar_source(ib: IB, contract: Contract, config: EngineConfig) -> BarSour
         return DelayedBarSource(
             ib,
             contract,
-            bar_size=config.data.delayed_bar_size,
-            lookback=config.data.delayed_lookback,
-            poll_seconds=config.data.delayed_poll_seconds,
+            bar_size=config.data.delayed.bar_size,
+            lookback=config.data.delayed.lookback,
+            poll_seconds=config.data.delayed.poll_seconds,
         )
     if mode is DataMode.REPLAY:
-        if config.data.replay_date is None:
+        if config.data.replay.date is None:
             raise ValueError(
                 "DATA_MODE=replay requires data.replay_date in the config "
                 "(or REPLAY_DATE in the environment)."
@@ -95,9 +95,9 @@ def make_bar_source(ib: IB, contract: Contract, config: EngineConfig) -> BarSour
         return ReplayBarSource(
             ib,
             contract,
-            replay_date=config.data.replay_date,
-            bar_size=config.data.replay_bar_size,
-            speed=config.data.replay_speed,
+            replay_date=config.data.replay.date,
+            bar_size=config.data.replay.bar_size,
+            speed=config.data.replay.speed,
             exchange_tz=config.opening_range.exchange_timezone,
         )
 

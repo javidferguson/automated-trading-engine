@@ -59,27 +59,44 @@ breakout:
 # realtime | delayed | replay -- see example.env. Kept here only as a fallback
 # default; the env var is the intended control surface.
 data:
+  # Which of the sections below applies. DATA_MODE in the environment (or
+  # --data-mode on the command line) overrides this; `make orb-delayed` and
+  # `make orb-replay` set it for you, so you do not need to edit this line to
+  # switch modes.
+  #
+  #   replay    a past session re-fed as if live. No subscription, no market
+  #             hours, NEVER places an order. The correctness gate.
+  #   delayed   live data ~15 min behind. No subscription. Observation only:
+  #             a 0DTE breakout cannot be traded on a 15-minute lag.
+  #   realtime  live 5-second bars. REQUIRES a paid IB market data
+  #             subscription. The only mode that can trade a breakout.
   mode: "replay"
 
-  # --- mode: replay -------------------------------------------------------
-  # Re-feeds a past session. No subscription, no market hours, never trades.
-  replay_date: "2026-08-26"      # YYYY-MM-DD, a past RTH session
-  replay_bar_size: "30 secs"     # historical bar size fed through the aggregator
-  replay_speed: 0                # seconds to sleep between bars (0 = as fast as possible)
-  #
-  # CAVEAT: the GEX stage cannot be replayed faithfully. IB removes expired
-  # contracts from the option chain, so the 0DTE expiration for a past session
-  # is simply not offered and its greeks/open interest cannot be retrieved. The
-  # engine logs a loud warning and falls forward to the nearest live expiration,
-  # marking the result point_in_time=false. Stages 1 and 2 (opening range and
-  # breakout) ARE faithful; treat replayed GEX as indicative only.
+  # Both sections are always read; `mode` decides which one is used. There is
+  # no need to comment either out.
 
-  # --- mode: delayed ------------------------------------------------------
-  # Live data, ~15 minutes behind. No subscription needed. Observation only:
-  # a 0DTE breakout cannot be traded on a 15-minute lag.
-  delayed_bar_size: "30 secs"    # bar size polled from IB
-  delayed_lookback: "1800 S"     # how far back each poll requests
-  delayed_poll_seconds: 30       # seconds between polls
+  replay:
+    date: "2026-08-26"      # YYYY-MM-DD, a past RTH session
+    bar_size: "30 secs"     # historical bar size fed through the aggregator
+    speed: 0                # seconds to sleep between bars (0 = as fast as possible)
+    #
+    # Setting `date` to TODAY is worth knowing about: the opening range and
+    # breakout replay from today's real bars, AND the 0DTE expiration is one IB
+    # still offers, so the GEX scan is genuinely point-in-time. That is the
+    # closest thing to a full end-to-end rehearsal without placing an order.
+    #
+    # For any EARLIER date the GEX stage cannot be faithful: IB removes expired
+    # contracts from the chain, so the session's own expiration is unavailable.
+    # The engine warns loudly, falls forward to the nearest live expiration and
+    # marks the result point_in_time=false. Stages 1 and 2 stay faithful either
+    # way -- it is only the option positioning that reflects today rather than
+    # the replayed session.
+
+  delayed:
+    bar_size: "30 secs"     # bar size polled from IB
+    lookback: "1800 S"      # how far back each poll requests
+    poll_seconds: 30        # seconds between polls
+
 
 # -----------------------------------------------------------------------------
 # Stage 3: Gamma Exposure (GEX)

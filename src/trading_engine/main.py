@@ -51,7 +51,7 @@ async def async_main(args: argparse.Namespace) -> int:
     if args.replay_date:
         from datetime import date
 
-        config.data.replay_date = date.fromisoformat(args.replay_date)
+        config.data.replay.date = date.fromisoformat(args.replay_date)
 
     engine = Engine(config)
     try:
