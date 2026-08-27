@@ -47,6 +47,29 @@ def _is_valid(value: Optional[float]) -> bool:
     return value is not None and not math.isnan(value) and value != 0
 
 
+def select_chain(chains: list, symbol: str):
+    """Pick the standard option chain for an underlying.
+
+    Select by tradingClass, NOT by exchange.
+
+    reqSecDefOptParams returns one entry per exchange x tradingClass. For SPY
+    that is ~20 entries, and all but one are the "2SPY" mini class carrying 3
+    strikes. Preferring the SMART *exchange* picked 2SPY, leaving the scan with
+    3 strikes centred nowhere near spot so no contract qualified. The standard
+    class is the one whose tradingClass equals the underlying symbol -- for SPY
+    that is the PHLX/SPY entry with 491 strikes.
+    """
+    standard = [c for c in chains if c.tradingClass == symbol]
+    chain = max(standard or chains, key=lambda c: len(c.strikes))
+    if not standard:
+        logger.warning(
+            "No chain with tradingClass == %s; falling back to the widest "
+            "available (%s/%s, %d strikes).",
+            symbol, chain.exchange, chain.tradingClass, len(chain.strikes),
+        )
+    return chain
+
+
 class GEXAnalyzer:
     """Computes gamma exposure per strike for the nearest qualifying expiration."""
 
@@ -81,14 +104,16 @@ class GEXAnalyzer:
         if not chains:
             raise LookupError(f"No option chain returned for {self.underlying.symbol}")
 
-        # Prefer the chain on the underlying's own exchange, else SMART, else the
-        # one offering the most strikes.
-        preferred = self.underlying.exchange or "SMART"
-        chain = next((c for c in chains if c.exchange == preferred), None)
-        if chain is None:
-            chain = next((c for c in chains if c.exchange == "SMART"), None)
-        if chain is None:
-            chain = max(chains, key=lambda c: len(c.strikes))
+        # Select by tradingClass, NOT by exchange.
+        #
+        # reqSecDefOptParams returns one entry per exchange x tradingClass. For
+        # SPY that is ~20 entries, and all but one are the "2SPY" mini class
+        # with 3 strikes. Preferring the SMART *exchange* picked 2SPY and left
+        # the scan with 3 strikes centred nowhere near spot, so every contract
+        # failed to qualify. The standard class is the one whose tradingClass
+        # equals the underlying symbol -- for SPY that is the PHLX/SPY entry
+        # with 491 strikes.
+        chain = select_chain(chains, self.underlying.symbol)
 
         logger.info(
             "Option chain: exchange=%s tradingClass=%s (%d expirations, %d strikes)",
@@ -97,7 +122,9 @@ class GEXAnalyzer:
             len(chain.expirations),
             len(chain.strikes),
         )
-        return sorted(chain.expirations), sorted(chain.strikes), chain.exchange, chain.tradingClass
+        # Build contracts on SMART so IB routes them, rather than pinning to
+        # whichever exchange happened to supply the chain parameters.
+        return sorted(chain.expirations), sorted(chain.strikes), "SMART", chain.tradingClass
 
     def find_target_expiration(self, expirations: list[str], today: Optional[date] = None) -> Optional[str]:
         """Pick the nearest expiration at or after today + days_to_expiration.

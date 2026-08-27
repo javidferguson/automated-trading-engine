@@ -92,6 +92,7 @@ def make_bar_source(ib: IB, contract: Contract, config: EngineConfig) -> BarSour
             replay_date=config.data.replay_date,
             bar_size=config.data.replay_bar_size,
             speed=config.data.replay_speed,
+            exchange_tz=config.opening_range.exchange_timezone,
         )
 
     raise ValueError(f"Unknown data mode: {mode}")
