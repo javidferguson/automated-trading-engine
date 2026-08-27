@@ -12,6 +12,7 @@ import asyncio
 import logging
 import re
 from datetime import date, datetime, time
+from zoneinfo import ZoneInfo
 from typing import AsyncIterator
 
 from ib_async import IB, Contract
@@ -49,6 +50,7 @@ class ReplayBarSource:
         bar_size: str = "30 secs",
         speed: float = 0.0,
         session_end: time = time(16, 0),
+        exchange_tz: str = "America/New_York",
     ):
         self.ib = ib
         self.contract = contract
@@ -56,10 +58,13 @@ class ReplayBarSource:
         self.bar_size = bar_size
         self.speed = speed
         self.session_end = session_end
+        self.exchange_tz = ZoneInfo(exchange_tz)
         self.source_bar_seconds = parse_bar_size_seconds(bar_size)
 
     async def stream(self) -> AsyncIterator[Bar]:
-        end_dt = datetime.combine(self.replay_date, self.session_end)
+        # Aware, for the same reason as the opening-range request: a naive
+        # endDateTime is resolved by IB in an unpredictable zone.
+        end_dt = datetime.combine(self.replay_date, self.session_end, tzinfo=self.exchange_tz)
         logger.info(
             "Replaying %s session for %s using %s bars",
             self.replay_date,

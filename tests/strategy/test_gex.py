@@ -138,3 +138,62 @@ def test_put_open_interest_is_read_from_the_put_field(analyzer):
     """A put carrying only callOpenInterest must not be counted."""
     tickers = [FakeTicker(FakeContract(100.0, "P"), FakeGreeks(0.03), callOpenInterest=9999)]
     assert analyzer._gex_from_tickers(tickers) == {}
+
+
+# --------------------------------------------------------- chain selection
+#
+# reqSecDefOptParams returns one entry per exchange x tradingClass. Selecting by
+# exchange picked SPY's "2SPY" mini class -- 3 strikes, none near spot -- so no
+# contract qualified and the GEX stage produced nothing.
+
+from dataclasses import dataclass as _dc, field as _field
+
+from trading_engine.strategy.gex import select_chain
+
+
+@_dc
+class FakeChain:
+    exchange: str
+    tradingClass: str
+    strikes: list = _field(default_factory=list)
+    expirations: list = _field(default_factory=list)
+
+
+def spy_chains():
+    """Shaped like the real reqSecDefOptParams response for SPY."""
+    real = FakeChain("PHLX", "SPY", strikes=list(range(491)), expirations=list(range(33)))
+    minis = [
+        FakeChain(ex, "2SPY", strikes=[668.0, 672.0, 682.0], expirations=["20260904"])
+        for ex in ("SMART", "CBOE", "BATS", "ISE", "MIAX", "NASDAQOM")
+    ]
+    return minis[:3] + [real] + minis[3:]
+
+
+def test_selects_the_chain_whose_trading_class_matches_the_symbol():
+    chain = select_chain(spy_chains(), "SPY")
+    assert chain.tradingClass == "SPY"
+    assert len(chain.strikes) == 491
+
+
+def test_does_not_select_by_exchange():
+    """SMART is present but carries the 3-strike mini class."""
+    chain = select_chain(spy_chains(), "SPY")
+    assert chain.exchange != "SMART"
+
+
+def test_picks_the_widest_when_several_share_the_trading_class():
+    chains = [
+        FakeChain("CBOE", "SPY", strikes=[1.0, 2.0]),
+        FakeChain("PHLX", "SPY", strikes=[1.0, 2.0, 3.0, 4.0]),
+    ]
+    assert len(select_chain(chains, "SPY").strikes) == 4
+
+
+def test_falls_back_to_the_widest_when_no_trading_class_matches():
+    chains = [
+        FakeChain("SMART", "2SPY", strikes=[1.0, 2.0, 3.0]),
+        FakeChain("CBOE", "SPYW", strikes=list(range(50))),
+    ]
+    chain = select_chain(chains, "SPY")
+    assert chain.tradingClass == "SPYW"
+    assert len(chain.strikes) == 50

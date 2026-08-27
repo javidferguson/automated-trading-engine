@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from enum import Enum
 from typing import Optional
 
@@ -162,12 +163,19 @@ class Engine:
 
     async def _state_get_opening_range(self) -> None:
         orb_cfg = self.config.opening_range
-        open_dt = datetime.combine(self.session_date, orb_cfg.market_open)
+        tz = ZoneInfo(orb_cfg.exchange_timezone)
+
+        # endDateTime MUST be timezone-aware. IB resolves a naive datetime in a
+        # zone of its own choosing: requesting a naive 10:00 for a 30-minute
+        # window returned the 10:30-10:59 bars, not 09:30-09:59, so the opening
+        # range was built from the wrong half hour and every bar then fell
+        # outside the filter.
+        open_dt = datetime.combine(self.session_date, orb_cfg.market_open, tzinfo=tz)
         range_end = open_dt + timedelta(minutes=orb_cfg.duration_minutes)
 
         # Live modes must wait for the window to actually close; replay must not.
-        if self.config.data_mode is not DataMode.REPLAY and datetime.now() < range_end:
-            wait = (range_end - datetime.now()).total_seconds() + 5
+        if self.config.data_mode is not DataMode.REPLAY and datetime.now(tz) < range_end:
+            wait = (range_end - datetime.now(tz)).total_seconds() + 5
             logger.info("Waiting %.0fs for the opening range to complete", wait)
             await asyncio.sleep(wait)
 
@@ -209,8 +217,9 @@ class Engine:
             source_bar_seconds=source.source_bar_seconds,
         )
 
+        tz = ZoneInfo(self.config.opening_range.exchange_timezone)
         range_end = datetime.combine(
-            self.session_date, self.config.opening_range.market_open
+            self.session_date, self.config.opening_range.market_open, tzinfo=tz
         ) + timedelta(minutes=self.config.opening_range.duration_minutes)
 
         logger.info(
@@ -220,8 +229,12 @@ class Engine:
         try:
             async for bar in source.stream():
                 # Bars from inside the opening range defined the levels; they
-                # cannot also break them.
-                if bar.timestamp < range_end:
+                # cannot also break them. Normalise first: IB returns aware
+                # timestamps intraday and naive ones for daily bars.
+                bar_ts = bar.timestamp
+                if bar_ts.tzinfo is None:
+                    bar_ts = bar_ts.replace(tzinfo=tz)
+                if bar_ts < range_end:
                     continue
 
                 signal = self.breakout.add_realtime_bar(bar, self.orb_high, self.orb_low)
