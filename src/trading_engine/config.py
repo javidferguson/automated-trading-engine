@@ -62,9 +62,16 @@ class BreakoutConfig(BaseModel):
 
 class DataConfig(BaseModel):
     mode: DataMode = DataMode.REPLAY
+
+    # DATA_MODE=replay
     replay_date: Optional[date] = None
     replay_bar_size: str = "30 secs"
     replay_speed: float = 0.0
+
+    # DATA_MODE=delayed
+    delayed_bar_size: str = "30 secs"
+    delayed_lookback: str = "1800 S"
+    delayed_poll_seconds: float = 30.0
 
     @field_validator("mode", mode="before")
     @classmethod

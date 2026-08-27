@@ -6,7 +6,7 @@ additions for the data-source mode and the trade decision.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from typing import Optional
 
@@ -78,6 +78,16 @@ class GEXResult(BaseModel):
     gex_by_strike: dict[float, float] = Field(default_factory=dict)
     strikes_analyzed: int = 0
     strikes_with_data: int = 0
+
+    as_of: Optional[date] = None
+    """The session this scan was meant to represent."""
+
+    point_in_time: bool = True
+    """False when the expiration we wanted was unavailable and a later one was
+    substituted. Only ever False in replay: IB drops expired contracts from the
+    chain, so historical option greeks and open interest cannot be retrieved.
+    A GEX result with this False describes *today's* positioning, not the
+    session being replayed, and must not be treated as a backtest input."""
 
 
 class TradeDecision(BaseModel):

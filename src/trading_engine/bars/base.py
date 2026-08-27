@@ -79,7 +79,13 @@ def make_bar_source(ib: IB, contract: Contract, config: EngineConfig) -> BarSour
     if mode is DataMode.REALTIME:
         return RealTimeBarSource(ib, contract)
     if mode is DataMode.DELAYED:
-        return DelayedBarSource(ib, contract)
+        return DelayedBarSource(
+            ib,
+            contract,
+            bar_size=config.data.delayed_bar_size,
+            lookback=config.data.delayed_lookback,
+            poll_seconds=config.data.delayed_poll_seconds,
+        )
     if mode is DataMode.REPLAY:
         if config.data.replay_date is None:
             raise ValueError(

@@ -60,10 +60,26 @@ breakout:
 # default; the env var is the intended control surface.
 data:
   mode: "replay"
-  # Used only when mode == replay:
+
+  # --- mode: replay -------------------------------------------------------
+  # Re-feeds a past session. No subscription, no market hours, never trades.
   replay_date: "2026-08-26"      # YYYY-MM-DD, a past RTH session
   replay_bar_size: "30 secs"     # historical bar size fed through the aggregator
   replay_speed: 0                # seconds to sleep between bars (0 = as fast as possible)
+  #
+  # CAVEAT: the GEX stage cannot be replayed faithfully. IB removes expired
+  # contracts from the option chain, so the 0DTE expiration for a past session
+  # is simply not offered and its greeks/open interest cannot be retrieved. The
+  # engine logs a loud warning and falls forward to the nearest live expiration,
+  # marking the result point_in_time=false. Stages 1 and 2 (opening range and
+  # breakout) ARE faithful; treat replayed GEX as indicative only.
+
+  # --- mode: delayed ------------------------------------------------------
+  # Live data, ~15 minutes behind. No subscription needed. Observation only:
+  # a 0DTE breakout cannot be traded on a 15-minute lag.
+  delayed_bar_size: "30 secs"    # bar size polled from IB
+  delayed_lookback: "1800 S"     # how far back each poll requests
+  delayed_poll_seconds: 30       # seconds between polls
 
 # -----------------------------------------------------------------------------
 # Stage 3: Gamma Exposure (GEX)

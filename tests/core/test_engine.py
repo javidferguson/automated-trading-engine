@@ -250,3 +250,31 @@ async def test_gex_below_spot_vetoes_a_bullish_breakout(engine, monkeypatch):
     assert engine.gex.highest_gex_strike == 449.0
     assert engine.signal.signal_type.value == "BUY"
     assert engine.ib.placed == []  # bullish break away from the pin: vetoed
+
+
+@pytest.mark.asyncio
+async def test_gex_expiration_is_taken_from_the_replay_session(engine, monkeypatch):
+    """The analyzer must be asked for the session's expiry, not today's."""
+    seen = {}
+
+    from trading_engine.strategy import gex as gex_mod
+
+    original = gex_mod.GEXAnalyzer.find_target_expiration
+
+    def spy(self, expirations, today=None):
+        seen["today"] = today
+        return original(self, expirations, today=today)
+
+    monkeypatch.setattr(gex_mod.GEXAnalyzer, "find_target_expiration", spy)
+    await engine.run()
+
+    assert seen["today"] == SESSION, f"expected the replay date {SESSION}, got {seen['today']}"
+
+
+@pytest.mark.asyncio
+async def test_replayed_gex_is_flagged_when_not_point_in_time(engine):
+    """The fake chain offers 20260826/20260828; the session is 2026-08-26."""
+    await engine.run()
+    assert engine.gex is not None
+    assert engine.gex.as_of == SESSION
+    assert engine.gex.point_in_time is True  # fake chain still has the session's expiry

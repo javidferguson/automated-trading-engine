@@ -126,8 +126,15 @@ class GEXAnalyzer:
         # whichever exchange happened to supply the chain parameters.
         return sorted(chain.expirations), sorted(chain.strikes), "SMART", chain.tradingClass
 
-    def find_target_expiration(self, expirations: list[str], today: Optional[date] = None) -> Optional[str]:
-        """Pick the nearest expiration at or after today + days_to_expiration.
+    def find_target_expiration(
+        self, expirations: list[str], today: Optional[date] = None
+    ) -> Optional[str]:
+        """Pick the nearest expiration at or after `today` + days_to_expiration.
+
+        `today` is the session being analysed, NOT the wall clock. In replay it
+        is the replay date, so DTE=0 means "expiring on the replayed session"
+        rather than "expiring today" -- previously this defaulted to
+        date.today() and a June replay scanned an August expiration.
 
         The original required an exact match, which meant DTE=0 aborted on any
         day the underlying had no expiry. Falling forward is both safer and what
@@ -226,14 +233,35 @@ class GEXAnalyzer:
     # Orchestration
     # ------------------------------------------------------------------ #
 
-    async def analyze(self, spot_price: float) -> Optional[GEXResult]:
-        """Run the full GEX scan. Returns None if it could not be computed."""
+    async def analyze(
+        self, spot_price: float, as_of: Optional[date] = None
+    ) -> Optional[GEXResult]:
+        """Run the full GEX scan.
+
+        `as_of` is the session being analysed. Returns None if GEX could not be
+        computed at all.
+        """
+        as_of = as_of or date.today()
         expirations, strikes, exchange, trading_class = await self._get_chain()
 
-        expiration = self.find_target_expiration(expirations)
+        expiration = self.find_target_expiration(expirations, today=as_of)
         if expiration is None:
             logger.error("No expiration at or after DTE=%d", self.days_to_expiration)
             return None
+
+        # IB drops expired contracts from the chain, so the expiration we want
+        # for a past session simply is not offered. Say so loudly rather than
+        # silently scanning a different expiry than the one requested.
+        wanted = as_of + timedelta(days=self.days_to_expiration)
+        point_in_time = datetime.strptime(expiration, "%Y%m%d").date() == wanted
+        if not point_in_time:
+            logger.warning(
+                "GEX is NOT point-in-time: wanted the %s expiration for session %s, "
+                "but IB only offers %s onward (expired contracts are removed from "
+                "the chain). Scanning %s instead -- this reflects TODAY's option "
+                "positioning, not %s. Treat the result as indicative only.",
+                wanted, as_of, min(expirations), expiration, as_of,
+            )
 
         selected = self.select_strikes(strikes, spot_price)
         if not selected:
@@ -288,6 +316,8 @@ class GEXAnalyzer:
 
         highest = max(by_strike, key=lambda k: abs(by_strike[k]))
         result = GEXResult(
+            as_of=as_of,
+            point_in_time=point_in_time,
             expiration=expiration,
             highest_gex_strike=highest,
             highest_gex_value=by_strike[highest],
