@@ -95,8 +95,8 @@ class Engine:
     @property
     def session_date(self) -> date:
         """The trading day being analysed -- the replay date, or today."""
-        if self.config.data_mode is DataMode.REPLAY and self.config.data.replay_date:
-            return self.config.data.replay_date
+        if self.config.data_mode is DataMode.REPLAY and self.config.data.replay.date:
+            return self.config.data.replay.date
         return date.today()
 
     def _banner(self) -> None:
