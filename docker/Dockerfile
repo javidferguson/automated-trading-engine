@@ -27,9 +27,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/src
 
 # Interactive by default: the engine asks for trade confirmation on stdin, and
-# `make trades-dev` runs the container attached so you can answer. Start the
-# engine yourself with one of:
-#     python -m trading_engine.main                     (uses DATA_MODE)
+# the orb-* make targets run the container attached so you can answer.
+#     make orb-replay / orb-delayed / orb-live
+# or, inside a shell here:
 #     python -m trading_engine.main --data-mode replay
-#     make orb-replay
 CMD ["bash"]

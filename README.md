@@ -2,10 +2,9 @@
 
 A local, Dockerized trading engine for Interactive Brokers. Two strategies live here:
 
-| Strategy | Status | What it does |
-|---|---|---|
-| **ORB + GEX** (`trading_engine`) | Primary | 30-minute opening range → clean-body 5-minute breakout → gamma-exposure confirmation → 0DTE option bracket order, human-confirmed. |
-| **0DTE options scanner** (`trading_engine.strategies.options_0dte`) | Parked | Scans a watchlist for 0DTE options, filters on Greeks, ranks by a weighted score. Kept working, not actively developed. |
+| Strategy | What it does |
+|---|---|
+| **ORB + GEX** (`trading_engine`) | 30-minute opening range → clean-body 5-minute breakout → gamma-exposure confirmation → 0DTE option bracket order, human-confirmed. |
 
 Everything runs against an IB **paper** account. Every order requires you to type
 the ticker symbol to confirm. There is no configuration flag that turns that off.
@@ -126,25 +125,13 @@ make orb-live
 Real-time mode. Requires a market-data subscription. Can place orders (paper
 account, confirmation required).
 
-Set the session to replay via `data.replay_date` in `config/orb-gamma-config.yaml`,
+Set the session to replay via `data.replay.date` in `config/orb-gamma-config.yaml`,
 or `--replay-date 2026-08-26` on the command line.
-
-### The parked options scanner
-
-```bash
-make trades-dev
-```
-
-Drops you into a shell in the trader container, then:
-
-```bash
-python -m trading_engine.strategies.options_0dte.scanner
-```
 
 ### Tests
 
 ```bash
-make test-local
+make test
 ```
 
 ---
@@ -155,7 +142,6 @@ make test-local
 |---|---|
 | `.env.jf.dev` | Credentials, `TRADING_MODE`, `DATA_MODE`. Gitignored. |
 | `config/orb-gamma-config.yaml` | ORB + GEX engine: instrument, opening range, breakout, GEX, bracket levels. |
-| `config/options-trader-config.yaml` | The parked options scanner: watchlist, Greeks thresholds. |
 
 ---
 
@@ -188,17 +174,14 @@ make help
 | `make debug-gateway` | Container status, recent logs, port bindings |
 | `make config-check` | Validate config files and report the resolved modes |
 | `make test-connection` | Ping + port check from trader to gateway |
-| `make backup-signals` | Copy signal CSVs into `backups/<date>/` |
 | `make stop` / `make down` | Stop / remove containers |
 
 ---
 
 ## Documentation
 
-- [`docs/ib_gateway_setup_guide.md`](docs/ib_gateway_setup_guide.md) — detailed Gateway bring-up
-- [`docs/quick_reference_card.md`](docs/quick_reference_card.md) — port and command reference
-- [`docs/ib_async_migration.md`](docs/ib_async_migration.md) — why `ib_async` over `ib_insync`
-- [`makefile_usage_guide.md`](makefile_usage_guide.md) — Makefile walkthrough
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — what the engine does, the four stages, which config drives what
+- [`docs/tradingagents-architecture.md`](docs/tradingagents-architecture.md) — design for the separate LLM research-desk project
 
 ---
 

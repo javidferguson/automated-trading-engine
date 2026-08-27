@@ -1,32 +1,25 @@
-# Options Trading Microservice Dependencies
+# ORB + Gamma Exposure Trading Engine -- runtime dependencies
+#
+# Kept deliberately small. Anything added here must be imported by something
+# under src/trading_engine/; see docs/ARCHITECTURE.md.
 
-# Interactive Brokers API (modern replacement for ib_insync)
+# Interactive Brokers API (the maintained successor to ib_insync)
 ib_async==2.1.0
 
-# Required by the trading engine to run ib_async inside an already-running loop
+# Required to run ib_async inside an already-running event loop
 nest_asyncio==1.6.0
 
-# Data analysis
-pandas==2.2.3
-numpy==2.3.4
-
-# Configuration
+# Config parsing and validation
 PyYAML==6.0.1
 pydantic==2.10.6
 
-# NOTE: do NOT add `asyncio` here. The PyPI package named `asyncio` is an
+# NOTE: do NOT add `asyncio` here. The PyPI package of that name is an
 # abandoned 3.4-era backport that shadows the stdlib module on modern Python.
-# asyncio ships with Python.
+#
+# Timezone handling uses stdlib zoneinfo -- pytz is not needed.
+# pandas/numpy/scipy were only ever used by the removed 0DTE scanner.
 
-# Logging
-python-json-logger==2.0.7
-
-# Financial calculations
-scipy==1.15.0
-
-# Timezone handling
-pytz==2024.1
-
-# Testing
+# Testing. pytest-asyncio is required by asyncio_mode="auto" in pyproject.toml.
 pytest==8.3.4
+pytest-asyncio==0.25.2
 pytest-mock==3.14.0
