@@ -74,6 +74,55 @@ the real chain, so SPY's $1 grid and SPX's $5 both work.
 
 ---
 
+## Which instruments this works on
+
+The code will trade **any optionable US stock or ETF** — set `instrument.ticker`
+and go. Strike spacing is handled automatically (`snap_to_strike` reads the real
+chain), so no per-symbol tuning is needed.
+
+What actually decides suitability is **how often the underlying has an
+expiration**. `gex.days_to_expiration: 0` means "expiring on the session being
+traded". On a day with no expiry the engine falls forward to the next available
+one — which is no longer 0DTE, and the gamma-pinning premise the strategy rests
+on no longer holds.
+
+Measured against the paper account (2026-08-27):
+
+| Symbol | Expirations | Strike gap | Verdict |
+|---|---|---|---|
+| **SPY** | every trading day | $1 | **Ideal** — true 0DTE every session |
+| **QQQ** | every trading day | $0.22 | **Ideal** |
+| **IWM** | every trading day | $0.50 | **Ideal** |
+| NVDA | ~Mon/Wed/Fri | $0.50 | Usable — 0DTE on ~3 sessions a week |
+| AAPL | ~Mon/Wed/Fri | $2.50 | Usable |
+| TSLA / AMD / MSFT | ~Mon/Wed/Fri | $2.50 | Usable |
+| **VOO** | weekly (Fridays) | $2.50 | **Poor** — 0DTE only on Fridays |
+| **IVV** | weekly (Fridays) | $0.50 | **Poor** |
+
+Two results worth internalising:
+
+- **VOO and IVV are not substitutes for SPY here.** They track the same index,
+  but their option chains are weekly-only. On four sessions out of five the
+  engine would be trading a multi-day option, not a 0DTE one.
+- **Single stocks do work**, just not daily. On a Tuesday or Thursday, NVDA's
+  nearest expiration is two or three days out. Either accept that the strategy
+  only runs ~3 days a week, or gate on it.
+
+Check any symbol yourself:
+
+```bash
+python scripts/check_instrument.py NVDA COST GOOGL
+```
+
+Also worth remembering: this is **one instrument per engine instance**. Running
+several means several processes, each with its own `connection.client_id`.
+
+Indices (SPX and similar) need `sec_type: "IND"` and `exchange: "CBOE"` set
+together with the ticker, because the engine builds an `Index` rather than a
+`Stock` from `sec_type`.
+
+---
+
 ## The two mode variables
 
 Deliberately separate. Conflating them is how a test run ends up pointed at an

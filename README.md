@@ -143,6 +143,18 @@ make test
 | `.env.jf.dev` | Credentials, `TRADING_MODE`, `DATA_MODE`. Gitignored. |
 | `config/orb-gamma-config.yaml` | ORB + GEX engine: instrument, opening range, breakout, GEX, bracket levels. |
 
+Change the traded asset via `instrument.ticker`. **SPY, QQQ and IWM are the
+strongest choices** — they are the only ones with an expiration every trading
+day, which is what "0DTE" requires. Single stocks such as NVDA or AAPL work but
+only expire ~3 sessions a week, and **VOO/IVV are weekly-only despite tracking
+the same index as SPY**. Check any symbol with:
+
+```bash
+python scripts/check_instrument.py NVDA VOO
+```
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the measured table.
+
 ---
 
 ## Safety
