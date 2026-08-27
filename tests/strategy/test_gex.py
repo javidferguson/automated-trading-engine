@@ -197,3 +197,32 @@ def test_falls_back_to_the_widest_when_no_trading_class_matches():
     chain = select_chain(chains, "SPY")
     assert chain.tradingClass == "SPYW"
     assert len(chain.strikes) == 50
+
+
+# ------------------------------------------------- session-relative expiry
+#
+# find_target_expiration defaulted to date.today(), so replaying a June session
+# scanned an August expiration -- "0DTE" relative to the wall clock rather than
+# to the session being analysed.
+
+def test_dte_zero_is_relative_to_the_session_not_today(analyzer):
+    """Replaying 2026-06-12 must target the 2026-06-12 expiry."""
+    expirations = ["20260612", "20260619", "20260827"]
+    chosen = analyzer.find_target_expiration(expirations, today=date(2026, 6, 12))
+    assert chosen == "20260612"
+
+
+def test_session_date_is_honoured_even_when_later_expiries_exist(analyzer):
+    expirations = ["20260612", "20260827", "20261218"]
+    assert analyzer.find_target_expiration(expirations, today=date(2026, 6, 15)) == "20260827"
+
+
+def test_replaying_a_past_session_falls_forward_when_the_expiry_is_gone(analyzer):
+    """IB removes expired contracts, so a past session's expiry is unavailable.
+
+    Falling forward is the only option; the caller marks the result
+    point_in_time=False so it is not mistaken for a backtest input.
+    """
+    live_only = ["20260827", "20260904", "20261218"]
+    chosen = analyzer.find_target_expiration(live_only, today=date(2026, 6, 12))
+    assert chosen == "20260827"

@@ -274,7 +274,7 @@ class Engine:
             data_timeout_seconds=self.config.gex.data_timeout_seconds,
         )
 
-        self.gex = await analyzer.analyze(self.spot_price)
+        self.gex = await analyzer.analyze(self.spot_price, as_of=self.session_date)
         if self.gex is None:
             logger.error("GEX analysis produced no result. Shutting down without trading.")
             self.state = State.SHUTDOWN
