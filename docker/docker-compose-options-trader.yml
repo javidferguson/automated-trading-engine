@@ -26,6 +26,14 @@ services:
       - RELOGIN_AFTER_TWOFA_TIMEOUT=yes
       - TWOFA_TIMEOUT_ACTION=restart
 
+      # What to do when IB reports the account is already logged in elsewhere
+      # (the web UI, the mobile app, another TWS). Without this, IBC has no
+      # instruction for the "Existing session detected" dialog and simply sits
+      # on it forever with no further log output -- the Gateway never finishes
+      # starting and never opens its API port.
+      # 'primary' = this Gateway takes over the session.
+      - EXISTING_SESSION_DETECTED_ACTION=${EXISTING_SESSION_DETECTED_ACTION:-primary}
+
     # -------------------------------------------------------------------------
     # PORTS -- read before "fixing" these numbers. They are correct.
     #
