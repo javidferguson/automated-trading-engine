@@ -26,6 +26,14 @@ services:
       - RELOGIN_AFTER_TWOFA_TIMEOUT=yes
       - TWOFA_TIMEOUT_ACTION=restart
 
+      # What to do when IB reports the account is already logged in elsewhere
+      # (the web UI, the mobile app, another TWS). Without this, IBC has no
+      # instruction for the "Existing session detected" dialog and simply sits
+      # on it forever with no further log output -- the Gateway never finishes
+      # starting and never opens its API port.
+      # 'primary' = this Gateway takes over the session.
+      - EXISTING_SESSION_DETECTED_ACTION=${EXISTING_SESSION_DETECTED_ACTION:-primary}
+
     # -------------------------------------------------------------------------
     # PORTS -- read before "fixing" these numbers. They are correct.
     #
@@ -63,7 +71,14 @@ services:
 
     # Health check to ensure Gateway is responding
     healthcheck:
-      test: ["CMD", "nc", "-zv", "localhost", "4004"]  # socat paper port (what clients connect to)
+      # Two things this must NOT do:
+      #   1. Use `nc` -- it is not installed in the gnzsnz image, so the check
+      #      errors out and the container is permanently "unhealthy".
+      #   2. Probe 4004 -- that is socat, which listens from container start
+      #      whether or not IB Gateway is up, so it reports healthy while the
+      #      Gateway is still on the login screen.
+      # Probe the Gateway's own port instead, with bash, which is present.
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/4002"]
       interval: 30s
       timeout: 10s
       retries: 3
