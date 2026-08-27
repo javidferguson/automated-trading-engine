@@ -1,39 +1,35 @@
-# Use Python 3.14 (or latest available)
 FROM python:3.13-slim
 
-# Install system dependencies
+# The build context is the REPO ROOT (see docker-compose: context: ../), so all
+# COPY paths below are relative to the repo root, not to docker/.
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-    zip \
-    && apt-get install -y gcc \
-    #&& apt-get install -y g++ \
-    && apt-get install -y git \
-    && apt-get install -y iputils-ping \
+        gcc \
+        git \
+        iputils-ping \
+        netcat-openbsd \
+        zip \
     && rm -rf /var/lib/apt/lists/*
-#RUN apt-get update && apt-get install -y \
-#    gcc \
-#    g++ \
-#    && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
 
-# Copy requirements file
-COPY ../requirements.txt .
-
-# Install Python dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application files
-COPY options-trading-main--TEST.py .
-COPY config/options-trader-config.yaml /app/config/options-trader-config.yaml
+# Application code
+COPY src/ /app/src/
+COPY config/ /app/config/
 
-# Create volume mount points
-VOLUME ["/app/logs", "/app/config"]
+VOLUME ["/app/logs", "/app/data"]
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/src
 
-# Run the application
-#CMD ["python", "options-trading-main--TEST.py"]
+# Interactive by default: the engine asks for trade confirmation on stdin, and
+# `make trades-dev` runs the container attached so you can answer. Start the
+# engine yourself with one of:
+#     python -m trading_engine.main                     (uses DATA_MODE)
+#     python -m trading_engine.main --data-mode replay
+#     make orb-replay
 CMD ["bash"]

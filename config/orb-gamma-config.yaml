@@ -1,0 +1,82 @@
+# =============================================================================
+# ORB + Gamma Exposure Engine Configuration
+# =============================================================================
+# Strategy: 30-minute opening range -> clean-body 5-min breakout -> GEX strike
+# confirmation -> 0DTE option bracket order (human-confirmed).
+#
+# Ported from the Bot_ORB_Gamma implementation (branch jf/test-ca-code),
+# translated from raw ibapi to ib_async.
+
+# -----------------------------------------------------------------------------
+# IB API Connection
+# -----------------------------------------------------------------------------
+# See example.env for why the port is 4004 and not 4002: the gnzsnz/ib-gateway
+# image binds the Gateway to container-localhost on 4001/4002 and relays via
+# socat on 4003 (live) / 4004 (paper). We connect from the trader container over
+# the docker network, so we must use the socat port.
+connection:
+  host: 'ajj-ib-gateway'   # docker service name ('127.0.0.1' for a local Gateway)
+  port: 4004               # socat paper. Live would be 4003 -- don't.
+  client_id: 2             # distinct from the options scanner's client_id: 1
+
+# -----------------------------------------------------------------------------
+# Account
+# -----------------------------------------------------------------------------
+account:
+  type: "paper"            # Enforced at runtime by assert_paper_account():
+                           # every managed account must start with DU/DF.
+
+# -----------------------------------------------------------------------------
+# Instrument
+# -----------------------------------------------------------------------------
+instrument:
+  ticker: "SPY"
+  sec_type: "STK"          # "IND" for cash indices such as SPX
+  exchange: "SMART"        # "CBOE" for SPX
+  currency: "USD"
+
+# -----------------------------------------------------------------------------
+# Stage 1: Opening Range
+# -----------------------------------------------------------------------------
+opening_range:
+  market_open_time: "09:30:00"   # exchange local time
+  duration_minutes: 30
+  bar_size: "1 min"
+
+# -----------------------------------------------------------------------------
+# Stage 2: Breakout Detection
+# -----------------------------------------------------------------------------
+breakout:
+  bar_size_seconds: 300    # aggregate 5-second bars into 5-minute candles
+
+# -----------------------------------------------------------------------------
+# Data source (DATA_MODE env var overrides this)
+# -----------------------------------------------------------------------------
+# realtime | delayed | replay -- see example.env. Kept here only as a fallback
+# default; the env var is the intended control surface.
+data:
+  mode: "replay"
+  # Used only when mode == replay:
+  replay_date: "2026-08-26"      # YYYY-MM-DD, a past RTH session
+  replay_bar_size: "30 secs"     # historical bar size fed through the aggregator
+  replay_speed: 0                # seconds to sleep between bars (0 = as fast as possible)
+
+# -----------------------------------------------------------------------------
+# Stage 3: Gamma Exposure (GEX)
+# -----------------------------------------------------------------------------
+gex:
+  days_to_expiration: 0    # 0DTE
+  strikes_quantity: 40     # centred on ATM. The original default of 120 is a lot
+                           # of concurrent subscriptions; IB throttles above ~100.
+  option_multiplier: 100
+  data_timeout_seconds: 30 # total wait for the whole concurrent batch
+
+# -----------------------------------------------------------------------------
+# Stage 4: Trade Execution
+# -----------------------------------------------------------------------------
+trade_execution:
+  quantity: 1                    # contracts per trade
+  max_quantity: 5                # hard cap; refuses anything larger
+  take_profit_percentage: 0.20   # +20% on the option premium
+  stop_loss_percentage: 0.30     # -30% on the option premium
+  require_confirmation: true     # ALWAYS true on this path. Enforced in code.

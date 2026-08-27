@@ -26,14 +26,31 @@ services:
       - RELOGIN_AFTER_TWOFA_TIMEOUT=yes
       - TWOFA_TIMEOUT_ACTION=restart
 
+    # -------------------------------------------------------------------------
+    # PORTS -- read before "fixing" these numbers. They are correct.
+    #
+    # The gnzsnz/ib-gateway image runs IB Gateway bound to CONTAINER-localhost
+    # on 4001 (live) / 4002 (paper). Those are NOT reachable from outside the
+    # container. The image runs socat to relay:
+    #
+    #     container 4003  ->  gateway 4001  (live)
+    #     container 4004  ->  gateway 4002  (paper)
+    #
+    # So anything connecting from outside must use the socat ports (4003/4004).
+    # The mapping below is HOST:CONTAINER, which is why host 4002 maps to
+    # container 4004 -- host-side we keep the conventional "4002 = paper"
+    # numbering, container-side we must hit socat.
+    #
+    #   trader container -> ajj-ib-gateway:4004   (over trading-network)
+    #   your Mac         -> 127.0.0.1:4002
+    # -------------------------------------------------------------------------
     ports:
-      # # IB Gateway API Ports
-      # - "127.0.0.1:4002:4002"  # Paper trading API
-      # - "127.0.0.1:4001:4001"  # Live trading API
+      - "127.0.0.1:4002:4004"  # Paper trading API (host 4002 -> socat paper)
 
-      # IB Gateway API Ports
-      - "127.0.0.1:4002:4004"  # Paper trading API
-      - "127.0.0.1:4001:4003"  # Live trading API
+      # Live trading API (host 4001 -> socat live). Left commented while this
+      # setup is paper-only: with TRADING_MODE=paper nothing is behind it, but
+      # it becomes a LIVE API endpoint the moment TRADING_MODE flips.
+      # - "127.0.0.1:4001:4003"
 
       # VNC Port (optional - for debugging/viewing Gateway UI)
       # Access via VNC client at localhost:5900 or browser at localhost:6080
@@ -46,7 +63,7 @@ services:
 
     # Health check to ensure Gateway is responding
     healthcheck:
-      test: ["CMD", "nc", "-zv", "localhost", "4002"]
+      test: ["CMD", "nc", "-zv", "localhost", "4004"]  # socat paper port (what clients connect to)
       interval: 30s
       timeout: 10s
       retries: 3
@@ -83,8 +100,14 @@ services:
     environment:
       # IB Connection Settings (override config.yaml)
       - IB_HOST=ajj-ib-gateway  # Docker service name
-      - IB_PORT=${IB_PORT:-4004}  # 4002 for paper, 4001 for live
+      - IB_PORT=${IB_PORT:-4004}  # socat paper port inside the gateway container
       - PAPER_TRADING=${PAPER_TRADING:-true}
+
+      # Where price bars come from. Separate from TRADING_MODE/PAPER_TRADING on
+      # purpose: those pick the ACCOUNT, this picks the DATA SOURCE.
+      # realtime | delayed | replay   (see example.env). Defaults to the safe
+      # one: replay never places an order.
+      - DATA_MODE=${DATA_MODE:-replay}
 
       # Optional: Logging level
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -98,30 +121,3 @@ networks:
   trading-network:
     driver: bridge
     name: trading-network
-
-#version: '3.8'
-#
-#services:
-#  ajj-options-trader:
-#    build:
-#      context: ../
-#      dockerfile: docker/Dockerfile
-#    container_name: ajj-options-trading-service
-#    stdin_open: true  # Enable interactive mode for user input
-#    tty: true
-#    volumes:
-#      # # Mount config for easy editing
-#      # - ../config/:/app/config/
-#      # #- /config.yaml:/app/config.yaml
-#      # # Mount logs directory
-#      # - ../logs:/app/logs
-#      - ../:/app
-#    ports:
-#      - "4001:4001" # IB Gateway port (vs. IB TWS 7497-Live | 7496-Paper)
-#    environment:
-#      # Can override config values via environment
-#      - IB_HOST=${IB_HOST:-127.0.0.1}
-#      - IB_PORT=${IB_PORT:-4001}
-#      - PAPER_TRADING=${PAPER_TRADING:-true}
-#    network_mode: host  # Required for IB TWS/Gateway connection
-#    restart: unless-stopped

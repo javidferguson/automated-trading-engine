@@ -1,314 +1,208 @@
-# Options Trading Microservice with Interactive Brokers
+# Automated Trading Engine
 
-A dockerized Python microservice for analyzing and trading 0DTE options based on Greeks analysis and breakout signals. Uses the modern `ib_async` library (successor to `ib_insync`).
+A local, Dockerized trading engine for Interactive Brokers. Two strategies live here:
 
-## Features
+| Strategy | Status | What it does |
+|---|---|---|
+| **ORB + GEX** (`trading_engine`) | Primary | 30-minute opening range → clean-body 5-minute breakout → gamma-exposure confirmation → 0DTE option bracket order, human-confirmed. |
+| **0DTE options scanner** (`trading_engine.strategies.options_0dte`) | Parked | Scans a watchlist for 0DTE options, filters on Greeks, ranks by a weighted score. Kept working, not actively developed. |
 
-- ✅ Real-time options data from Interactive Brokers
-- ✅ Greeks calculation (Gamma, Delta, Vega, Theta, IV)
-- ✅ Breakout signal detection based on configurable thresholds
-- ✅ Paper trading and live trading modes
-- ✅ Interactive CLI for position sizing and trade confirmation
-- ✅ Comprehensive logging and trade tracking
-- ✅ Risk management (max trades/day, confirmation required)
-- ✅ 0DTE options focus with configurable watchlist
+Everything runs against an IB **paper** account. Every order requires you to type
+the ticker symbol to confirm. There is no configuration flag that turns that off.
 
-## Prerequisites
+---
 
-### 1. Interactive Brokers Account
-- Active IB account with API access enabled
-- Paper trading account recommended for testing
-- Market data subscriptions (if needed)
+## Architecture
 
-### 2. Docker
-- Docker Engine 20.10+
-- Docker Compose 2.0+
+Two containers on a `trading-network` bridge:
 
-### 3. System Requirements
-- 4GB RAM minimum
-- 2GB disk space
-- Stable internet connection
+```
+┌─────────────────────────────┐
+│  ajj-ib-gateway             │   ghcr.io/gnzsnz/ib-gateway
+│  IB Gateway + IBC + socat   │   handles login and the IB connection
+│  noVNC on :6080             │
+└──────────────┬──────────────┘
+               │  docker network
+┌──────────────▼──────────────┐
+│  ajj-options-trader         │   your Python code (ib_async)
+│  trading_engine             │
+└─────────────────────────────┘
+```
 
-## Quick Start
+### Ports — read this before changing them
 
-### 1. Clone and Setup
+The Gateway image binds IB Gateway to **container-localhost** on 4001 (live) /
+4002 (paper). Those are unreachable from outside the container, so the image runs
+**socat** relaying **4003 (live) / 4004 (paper)**. The right port depends on where
+you connect *from*:
+
+| From | Paper port |
+|---|---|
+| The trader container, over the docker network | **4004** |
+| Your Mac (`127.0.0.1`) — compose maps host 4002 → container 4004 | **4002** |
+
+The app runs inside the trader container, so its config says `4004`. Both numbers
+are correct; they describe different vantage points.
+
+---
+
+## Setup
+
+### 1. Credentials
 
 ```bash
-# Create project directory
-mkdir options-trader
-cd options-trader
-
-# Create all necessary files (copy the artifacts provided)
-# - main.py
-# - config.yaml
-# - requirements.txt
-# - Dockerfile
-# - docker-compose.yml
+make setup
 ```
 
-### 2. Configure Interactive Brokers
+Creates `.env.jf.dev` from `example.env` and opens it. Fill in `IB_USERNAME`,
+`IB_PASSWORD`, and leave `TRADING_MODE=paper`.
 
-**In TWS/IB Gateway:**
-1. Go to File → Global Configuration → API → Settings
-2. Enable "Enable ActiveX and Socket Clients"
-3. Add "127.0.0.1" to "Trusted IP Addresses"
-4. Set Socket port to 7497 (paper) or 7496 (live)
-5. Uncheck "Read-Only API"
-6. Click OK and restart TWS/Gateway
+`.env.jf.dev` is gitignored and is what `docker-compose` actually reads. Without
+it, every `make` target fails.
 
-### 3. Configure the Service
+### 2. Two environment variables that are easy to confuse
 
-Edit `config.yaml`:
+| Variable | Controls | Values |
+|---|---|---|
+| `TRADING_MODE` | Which **account** the Gateway logs into | `paper` / `live` |
+| `DATA_MODE` | Where **bars** come from | `realtime` / `delayed` / `replay` |
 
-```yaml
-# Set your watchlist
-watchlist:
-  - SPX
-  - SPY
-  - QQQ
+They are deliberately separate. Conflating them is how a test run ends up
+pointed at an account you did not intend.
 
-# Adjust for paper vs live trading
-ib_port: 7497  # 7497 = paper, 7496 = live
-paper_trading: true  # Always start with paper trading!
+### 3. Market data
 
-# Tune your Greeks thresholds
-min_gamma: 0.05
-min_delta: 0.20
-max_delta: 0.80
-```
+`DATA_MODE` determines what you can actually do:
 
-### 4. Build and Run
+| Mode | Subscription | Can trade? | Use it for |
+|---|---|---|---|
+| `replay` | none | **No** | Verifying the strategy against a past session. The default. |
+| `delayed` | none | No (bars are ~15 min late) | Watching the state machine against live-shaped data. |
+| `realtime` | **required** | Yes | The only mode that can trade a live breakout. |
+
+A 0DTE opening-range breakout cannot be traded on 15-minute-delayed bars — the
+move is over by the time the bar arrives. Real-time mode needs an IB market-data
+subscription (a US equities/index bundle plus OPRA options top-of-book). Check
+current pricing in IB Account Management; paper accounts inherit the live
+account's subscriptions.
+
+---
+
+## Running
 
 ```bash
-# Build the Docker image
-docker-compose build
-
-# Run the service
-docker-compose up
-
-# Or run in detached mode
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
+make gateway-start
 ```
 
-## Usage
-
-### Running a Scan
-
-When you start the service, it will:
-1. Connect to Interactive Brokers
-2. Scan each symbol in your watchlist for 0DTE options
-3. Calculate Greeks for all options
-4. Analyze for breakout opportunities
-5. Present top opportunities for your review
-
-### Trade Confirmation Flow
-
-When a potential trade is detected:
-
-```
-==============================================================
-TRADE OPPORTUNITY DETECTED
-==============================================================
-Symbol: SPX
-Type: C (Call/Put)
-Strike: $4500.00
-Expiration: 20241209
-Price: $12.50
-
-Greeks:
-  Delta: 0.4532
-  Gamma: 0.0823
-  Vega: 0.2341
-  Theta: -0.3210
-  IV: 18.45%
-
-Breakout Score: 87.32
-==============================================================
-
-Execute this trade? (yes/no): yes
-Enter number of contracts: 2
-```
-
-### Monitoring
+Wait ~60 seconds, then confirm it logged in:
 
 ```bash
-# View real-time logs
-docker-compose logs -f options-trader
-
-# Check trade log file
-cat logs/trading.log
-
-# Access container shell
-docker exec -it options-trading-service bash
+make gateway-check
 ```
-
-## Configuration Reference
-
-### Greeks Thresholds
-
-| Parameter | Description | Default | Recommendation |
-|-----------|-------------|---------|----------------|
-| `min_gamma` | Minimum gamma for sensitivity | 0.05 | Higher = more volatile |
-| `min_delta` | Minimum directional exposure | 0.20 | For OTM options |
-| `max_delta` | Maximum directional exposure | 0.80 | Avoid deep ITM |
-| `min_vega` | Minimum vol sensitivity | 0.10 | Benefits from vol expansion |
-| `min_theta` | Maximum time decay | -0.50 | Less decay = longer hold |
-
-### IV Percentile Strategy
-
-- **30-70 range**: Balanced approach, avoid extremes
-- **20-40 range**: Low IV, expect expansion
-- **60-80 range**: High IV, mean reversion risk
-
-### Risk Management
-
-```yaml
-max_trades_per_day: 5      # Limit daily trades
-require_confirmation: true  # Manual approval required
-```
-
-## Advanced Features
-
-### Custom Watchlist
-
-```yaml
-watchlist:
-  - SPX    # S&P 500 Index
-  - SPY    # S&P 500 ETF
-  - QQQ    # Nasdaq ETF
-  - AAPL   # Individual stocks
-  - TSLA
-  - NVDA
-```
-
-### Scheduling Scans
-
-Use cron inside container:
-
-```dockerfile
-# Add to Dockerfile
-RUN apt-get install -y cron
-
-# Create cron job
-CMD cron && python main.py
-```
-
-Or use external scheduler:
 
 ```bash
-# Run every hour
-0 * * * * cd /path/to/options-trader && docker-compose up
+make gateway-vnc
 ```
 
-### Environment Variables
+That opens the Gateway UI at `localhost:6080` so you can watch the login.
 
-Override config via environment:
+### The ORB + GEX engine
 
 ```bash
-# .env file
-IB_HOST=192.168.1.100
-IB_PORT=7496
-PAPER_TRADING=false
+make orb-replay
 ```
 
-## Extending the Service
+Replays a past session end to end. No subscription, no open market, no orders —
+this is how you verify the strategy works.
 
-### Adding New Strategies
-
-1. **Spreads**: Modify `execute_trade()` to handle multi-leg orders
-2. **Stop Loss**: Add `stop_loss_monitor()` async task
-3. **Profit Taking**: Implement target price exits
-
-### Additional Analysis
-
-```python
-# Add to BreakoutAnalyzer class
-def calculate_expected_move(self, df: pd.DataFrame) -> float:
-    """Calculate expected move from straddle prices"""
-    atm_call = df[df['right'] == 'C'].iloc[0]
-    atm_put = df[df['right'] == 'P'].iloc[0]
-    return (atm_call['mid_price'] + atm_put['mid_price']) * 0.85
-```
-
-### Database Integration
-
-Add PostgreSQL for trade history:
-
-```yaml
-# docker-compose.yml
-services:
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: trading
-      POSTGRES_USER: trader
-      POSTGRES_PASSWORD: secure_password
-```
-
-## Troubleshooting
-
-### Connection Issues
-
-**Error: "Connection refused"**
-- Ensure TWS/Gateway is running
-- Check API settings are enabled
-- Verify correct port (7497/7496)
-- Check firewall settings
-
-**Error: "Cannot connect to IB"**
 ```bash
-# Test connection
-telnet 127.0.0.1 7497
+make orb-delayed
 ```
 
-### Data Issues
+```bash
+make orb-live
+```
 
-**No options found**
-- Symbol may not have 0DTE options
-- Check if options are available for that expiration
-- Verify market hours
+Real-time mode. Requires a market-data subscription. Can place orders (paper
+account, confirmation required).
 
-**Greeks not calculating**
-- Increase sleep time in `get_option_data()`
-- Check if market data subscription is active
+Set the session to replay via `data.replay_date` in `config/orb-gamma-config.yaml`,
+or `--replay-date 2026-08-26` on the command line.
 
-### Performance
+### The parked options scanner
 
-**Slow scanning**
-- Reduce number of strikes analyzed
-- Increase asyncio sleep times
-- Use `asyncio.gather()` for parallel requests
+```bash
+make trades-dev
+```
 
-## Safety Reminders
+Drops you into a shell in the trader container, then:
 
-⚠️ **ALWAYS START WITH PAPER TRADING** ⚠️
+```bash
+python -m trading_engine.strategies.options_0dte.scanner
+```
 
-1. Test thoroughly in paper trading mode
-2. Verify all calculations are correct
-3. Ensure order execution works as expected
-4. Start with small position sizes
-5. Monitor first trades manually
-6. Set appropriate stop losses
+### Tests
 
-## Support and Resources
+```bash
+make test-local
+```
 
-### Interactive Brokers API
-- [IB API Documentation](https://interactivebrokers.github.io/tws-api/)
-- [ib_async Documentation](https://ib-api-reloaded.github.io/ib_async/)
-- [ib_async GitHub](https://github.com/ib-api-reloaded/ib_async)
+---
 
-### Options Trading
-- Greeks definitions and strategies
-- 0DTE options risks and rewards
-- Position sizing calculators
+## Configuration
 
-## License
+| File | Purpose |
+|---|---|
+| `.env.jf.dev` | Credentials, `TRADING_MODE`, `DATA_MODE`. Gitignored. |
+| `config/orb-gamma-config.yaml` | ORB + GEX engine: instrument, opening range, breakout, GEX, bracket levels. |
+| `config/options-trader-config.yaml` | The parked options scanner: watchlist, Greeks thresholds. |
 
-This is a personal trading tool. Use at your own risk. Not financial advice.
+---
+
+## Safety
+
+- **Paper-account assertion.** `ib.managedAccounts()` must return only accounts
+  prefixed `DU`/`DF`. Checked immediately after connecting *and* again immediately
+  before every `placeOrder` — a reconnect can land somewhere unexpected in
+  between. The port number is not a safety guarantee; this is.
+- **Human confirmation.** Approving an order requires typing the ticker symbol,
+  not `y`. The prompt shows the full bracket, the total debit, the max loss, and
+  IB's `whatIfOrder` margin and commission estimate.
+- **Replay cannot trade.** Enforced inside `OrderManager`, not just at the call
+  site, so a future caller cannot route around it.
+- **Journal.** Every proposal, decline, submission, and order-status change is
+  appended to `data/journal/trades_YYYYMMDD.jsonl`.
+
+---
+
+## Useful commands
+
+```bash
+make help
+```
+
+| Command | Does |
+|---|---|
+| `make gateway-logs` | Follow Gateway logs |
+| `make trader-shell` | Shell into the trading container |
+| `make debug-gateway` | Container status, recent logs, port bindings |
+| `make config-check` | Validate config files and report the resolved modes |
+| `make test-connection` | Ping + port check from trader to gateway |
+| `make backup-signals` | Copy signal CSVs into `backups/<date>/` |
+| `make stop` / `make down` | Stop / remove containers |
+
+---
+
+## Documentation
+
+- [`docs/ib_gateway_setup_guide.md`](docs/ib_gateway_setup_guide.md) — detailed Gateway bring-up
+- [`docs/quick_reference_card.md`](docs/quick_reference_card.md) — port and command reference
+- [`docs/ib_async_migration.md`](docs/ib_async_migration.md) — why `ib_async` over `ib_insync`
+- [`makefile_usage_guide.md`](makefile_usage_guide.md) — Makefile walkthrough
+
+---
 
 ## Disclaimer
 
-This software is for educational purposes. Trading options involves substantial risk of loss. The developer is not responsible for any financial losses incurred from using this software. Always trade responsibly and within your risk tolerance.
+Personal software, for educational use. Trading options involves substantial risk
+of loss. Not financial advice. Use at your own risk.
