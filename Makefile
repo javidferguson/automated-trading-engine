@@ -114,7 +114,7 @@ gateway-check: ## Check if Gateway is ready
 		echo "$(GREEN)✓ IB Gateway is logged in and listening (4002)$(NC)" || \
 		(echo "$(YELLOW)⚠ Gateway is running but NOT logged in yet.$(NC)"; \
 		 echo "  Login can take 60-90s. If it stays this way, look at the screen:"; \
-		 echo "    make gateway-vnc      # opens http://localhost:6080"; \
+		 echo "    make gateway-vnc      # opens vnc://localhost:5900"; \
 		 echo "  A dialog waiting for input (2FA, warning, or config) will be visible there.")
 	@docker-compose -f $(COMPOSE_FILE) exec -T $(GATEWAY_SERVICE) \
 		bash -c "echo > /dev/tcp/127.0.0.1/4004" 2>/dev/null && \
@@ -122,19 +122,18 @@ gateway-check: ## Check if Gateway is ready
 		echo "$(RED)✗ socat relay is not listening on 4004$(NC)"
 
 .PHONY: gateway-vnc
-gateway-vnc: ## Open Gateway UI in browser (noVNC)
+gateway-vnc: ## Open the Gateway screen in a VNC client
 	@grep -qE "^VNC_PASSWORD=.+" $(ENV_FILE) 2>/dev/null || \
 		(echo "$(RED)✗ VNC_PASSWORD is not set in $(ENV_FILE).$(NC)"; \
-		 echo "  The container only starts its VNC server when that is set, so"; \
-		 echo "  localhost:6080 will fail with 'didn't send any data'."; \
+		 echo "  The container starts its VNC server only when that is set."; \
 		 echo "  Set it, then: make gateway-restart"; exit 1)
 	@docker-compose -f $(COMPOSE_FILE) exec -T $(GATEWAY_SERVICE) \
-		bash -c "echo > /dev/tcp/127.0.0.1/6080" 2>/dev/null || \
-		echo "$(YELLOW)⚠ noVNC not listening yet -- give it a few seconds after start.$(NC)"
-	@echo "$(GREEN)Opening Gateway UI in browser...$(NC)"
-	@echo "$(YELLOW)If browser doesn't open, visit: http://localhost:6080$(NC)"
-	@open http://localhost:6080 2>/dev/null || xdg-open http://localhost:6080 2>/dev/null || \
-		echo "$(YELLOW)Please manually open: http://localhost:6080$(NC)"
+		bash -c "echo > /dev/tcp/127.0.0.1/5900" 2>/dev/null || \
+		echo "$(YELLOW)⚠ VNC not listening yet -- give it ~15s after start.$(NC)"
+	@echo "$(GREEN)Opening the Gateway screen...$(NC)"
+	@echo "$(YELLOW)Password is VNC_PASSWORD from $(ENV_FILE).$(NC)"
+	@open vnc://localhost:5900 2>/dev/null || \
+		echo "$(YELLOW)Connect a VNC client to localhost:5900$(NC)"
 
 # =============================================================================
 # Trader-Specific Commands

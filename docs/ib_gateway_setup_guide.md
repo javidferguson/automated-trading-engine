@@ -124,7 +124,7 @@ docker-compose ps
 
 # Should show:
 # NAME         STATUS        PORTS
-# ib-gateway   Up (healthy)  4001-4002, 5900, 6080
+# ib-gateway   Up (healthy)  4001-4002, 5900
 
 # Check logs for errors
 docker-compose logs ib-gateway | grep -i error
@@ -136,7 +136,7 @@ If you want to see the Gateway interface:
 
 #### Option A: Browser-Based (Easiest)
 
-Open your browser to: `http://localhost:6080`
+Open your browser to: `vnc://localhost:5900`
 
 #### Option B: VNC Client
 
@@ -365,7 +365,7 @@ docker-compose logs ajj-options-trader | grep "Trading Mode"
    ```
 
 2. **Try browser-based noVNC:**
-   Open: `http://localhost:6080`
+   Open: `vnc://localhost:5900`
 
 3. **Check VNC password:**
    - Should be set in `.env` as VNC_PASSWORD

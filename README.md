@@ -20,7 +20,7 @@ Two containers on a `trading-network` bridge:
 ┌─────────────────────────────┐
 │  ajj-ib-gateway             │   ghcr.io/gnzsnz/ib-gateway
 │  IB Gateway + IBC + socat   │   handles login and the IB connection
-│  noVNC on :6080             │
+│  VNC on :5900               │
 └──────────────┬──────────────┘
                │  docker network
 ┌──────────────▼──────────────┐
@@ -104,7 +104,7 @@ make gateway-check
 make gateway-vnc
 ```
 
-That opens the Gateway UI at `localhost:6080` so you can watch the login.
+That opens the Gateway UI at `localhost:5900` so you can watch the login.
 
 ### The ORB + GEX engine
 

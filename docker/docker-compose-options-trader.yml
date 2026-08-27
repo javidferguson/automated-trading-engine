@@ -24,10 +24,9 @@ services:
       # VNC / noVNC access to the Gateway UI.
       #
       # The image starts x11vnc and noVNC ONLY when VNC_SERVER_PASSWORD is set.
-      # With it unset, ports 5900/6080 are published but nothing listens inside
-      # the container, so http://localhost:6080 fails with "didn't send any
-      # data" -- and you have no way to see a login dialog that is waiting for
-      # input, which is exactly when you need it most.
+      # With it unset, port 5900 is published but nothing listens inside the
+      # container -- and you have no way to see a login dialog that is waiting
+      # for input, which is exactly when you need it most.
       #
       # Set VNC_PASSWORD in .env.jf.dev to enable. Both ports are bound to
       # 127.0.0.1 only, so they are not exposed beyond this machine.
@@ -79,10 +78,12 @@ services:
       # it becomes a LIVE API endpoint the moment TRADING_MODE flips.
       # - "127.0.0.1:4001:4003"
 
-      # VNC Port (optional - for debugging/viewing Gateway UI)
-      # Access via VNC client at localhost:5900 or browser at localhost:6080
+      # VNC. The image ships x11vnc only -- there is no websockify/noVNC, so
+      # nothing ever listens on 6080 and http://localhost:6080 fails with
+      # "didn't send any data". Use a real VNC client:
+      #     open vnc://localhost:5900     (macOS Screen Sharing)
+      # Password is VNC_SERVER_PASSWORD.
       - "127.0.0.1:5900:5900"  # VNC Server
-      - "127.0.0.1:6080:6080"  # noVNC (browser-based VNC)
 
     restart: unless-stopped
     networks:
