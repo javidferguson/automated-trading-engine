@@ -69,6 +69,7 @@ class Engine:
         self.orb = OpeningRangeStrategy(
             market_open=config.opening_range.market_open,
             duration_minutes=config.opening_range.duration_minutes,
+            exchange_tz=config.opening_range.exchange_timezone,
         )
         self.breakout: Optional[BreakoutStrategy] = None
 
@@ -117,9 +118,10 @@ class Engine:
         logger.info("  Instrument  : %s %s @ %s", self.contract.symbol,
                     self.config.instrument.sec_type, self.contract.exchange)
         logger.info("  Session     : %s", self.session_date)
-        logger.info("  Opening rng : %s for %d min",
+        logger.info("  Opening rng : %s for %d min (%s)",
                     self.config.opening_range.market_open_time,
-                    self.config.opening_range.duration_minutes)
+                    self.config.opening_range.duration_minutes,
+                    self.config.opening_range.exchange_timezone)
         logger.info("  Candle size : %ds", self.config.breakout.bar_size_seconds)
         if not mode.can_trade:
             logger.info("  >> Replay mode: no order will be placed.")

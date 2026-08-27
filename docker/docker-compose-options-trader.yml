@@ -14,6 +14,13 @@ services:
       # Trading Mode: 'paper' or 'live'
       - TRADING_MODE=${TRADING_MODE:-paper}
 
+      # Gateway timezone. Without this the image writes TimeZone=Etc/UTC into
+      # jts.ini, and IB then returns historical bar timestamps in UTC. The
+      # opening-range stage looks for bars between 09:30 and 10:00 exchange
+      # time, so UTC timestamps (13:30-14:00) match nothing, the range comes
+      # back empty, and the engine shuts down without explanation.
+      - TIME_ZONE=${TIME_ZONE:-America/New_York}
+
       # VNC / noVNC access to the Gateway UI.
       #
       # The image starts x11vnc and noVNC ONLY when VNC_SERVER_PASSWORD is set.
@@ -135,6 +142,10 @@ services:
       # realtime | delayed | replay   (see example.env). Defaults to the safe
       # one: replay never places an order.
       - DATA_MODE=${DATA_MODE:-replay}
+
+      # Match the Gateway's timezone so date.today() and naive bar timestamps
+      # agree with the exchange session the strategy reasons about.
+      - TZ=${TIME_ZONE:-America/New_York}
 
       # Optional: Logging level
       - LOG_LEVEL=${LOG_LEVEL:-INFO}

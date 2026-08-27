@@ -47,6 +47,9 @@ class OpeningRangeConfig(BaseModel):
     market_open_time: str = "09:30:00"
     duration_minutes: int = 30
     bar_size: str = "1 min"
+    # The timezone market_open_time is expressed in. Must match the exchange,
+    # and the Gateway's TIME_ZONE should match it too.
+    exchange_timezone: str = "America/New_York"
 
     @property
     def market_open(self) -> time:
