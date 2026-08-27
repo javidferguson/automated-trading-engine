@@ -7,7 +7,7 @@
 | **IB Gateway** | 4002 | 4001 |
 | **TWS** | 7497 | 7496 |
 | **VNC** | 5900 | 5900 |
-| **noVNC (Browser)** | 6080 | 6080 |
+
 
 ## Essential Commands
 
@@ -151,7 +151,7 @@ grep IB_PORT .env
 
 ```bash
 # Browser (easiest)
-open http://localhost:6080
+open vnc://localhost:5900
 
 # Or VNC client to localhost:5900
 # Password: from VNC_PASSWORD in .env
@@ -197,7 +197,7 @@ curl -v telnet://localhost:4002
 
 ```bash
 # Browser-based (noVNC)
-http://localhost:6080
+vnc://localhost:5900
 
 # VNC Client
 Host: localhost:5900
@@ -346,7 +346,7 @@ docker network inspect ajj-trading-network
 
 ## Important URLs
 
-- **noVNC (Browser Gateway UI)**: http://localhost:6080
+- **noVNC (Browser Gateway UI)**: vnc://localhost:5900
 - **IB Status Page**: https://status.interactivebrokers.com
 - **IB Account Management**: https://www.interactivebrokers.com/sso
 - **Docker Hub Gateway Image**: https://github.com/gnzsnz/ib-gateway-docker
