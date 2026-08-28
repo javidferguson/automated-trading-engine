@@ -67,8 +67,10 @@ class DelayedBarSource:
 
     async def stream(self) -> AsyncIterator[Bar]:
         logger.warning(
-            "DATA_MODE=delayed: bars lag the market by roughly 15 minutes. "
-            "Suitable for observing the state machine, not for trading a breakout."
+            "DATA_MODE=delayed: bars lag the market by roughly 15 minutes, so any "
+            "entry limit is priced off stale data. Orders ARE permitted in this "
+            "mode and you will be asked to confirm -- treat a fill as a test of "
+            "the mechanism, not of the strategy."
         )
 
         while not self._closed:
