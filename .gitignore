@@ -137,6 +137,9 @@ celerybeat.pid
 # Environments
 .env*
 .env.jf.dev
+# The env file has no leading dot, so `.env*` above does NOT cover it.
+# It holds IB_USERNAME, IB_PASSWORD and VNC_PASSWORD -- keep this entry.
+env.dev
 .envrc
 .venv
 env/
