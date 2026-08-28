@@ -205,4 +205,12 @@ make test                                  # suite, in the container
 ```
 
 See `README.md` for setup. `docs/tradingagents-architecture.md` covers the
-separate LLM research-desk project.
+separate LLM research-desk project, and
+`docs/tradingagents-migration-plan.md` its build order.
+
+**This engine is frozen for the duration of that build.** Bug fixes are fine;
+changes made on behalf of the research desk are not. It borrows four modules by
+copy — `execution/safety.py`, `execution/confirmation.py`,
+`execution/journal.py`, `logging_setup.py` — and the copies are then owned
+there. A security-relevant fix to `assert_paper_account` has to be applied in
+both places.

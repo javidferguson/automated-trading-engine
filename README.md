@@ -182,6 +182,7 @@ make help
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — what the engine does, the four stages, which config drives what
 - [`docs/tradingagents-architecture.md`](docs/tradingagents-architecture.md) — design for the separate LLM research-desk project
+- [`docs/tradingagents-migration-plan.md`](docs/tradingagents-migration-plan.md) — the build order for that project, and which modules here get copied into it
 
 ---
 
