@@ -4,7 +4,8 @@
 
 DATA_MODE (env) or --data-mode selects where bars come from:
     realtime  live 5-second bars (needs a paid IB market data subscription)
-    delayed   polled historical bars, ~15 min behind -- observation only
+    delayed   polled historical bars, ~15 min behind; CAN place orders,
+              but the entry limit is priced off stale data
     replay    a past session re-fed; never places an order
 """
 

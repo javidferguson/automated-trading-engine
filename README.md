@@ -53,10 +53,10 @@ are correct; they describe different vantage points.
 make setup
 ```
 
-Creates `.env.jf.dev` from `example.env` and opens it. Fill in `IB_USERNAME`,
+Creates `env.dev` from `example.env` and opens it. Fill in `IB_USERNAME`,
 `IB_PASSWORD`, and leave `TRADING_MODE=paper`.
 
-`.env.jf.dev` is gitignored and is what `docker-compose` actually reads. Without
+`env.dev` is gitignored and is what `docker-compose` actually reads. Without
 it, every `make` target fails.
 
 ### 2. Two environment variables that are easy to confuse
@@ -140,7 +140,7 @@ make test
 
 | File | Purpose |
 |---|---|
-| `.env.jf.dev` | Credentials, `TRADING_MODE`, `DATA_MODE`. Gitignored. |
+| `env.dev` | Credentials, `TRADING_MODE`, `DATA_MODE`. Gitignored. |
 | `config/orb-gamma-config.yaml` | ORB + GEX engine: instrument, opening range, breakout, GEX, bracket levels. |
 
 ---

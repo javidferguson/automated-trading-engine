@@ -69,7 +69,7 @@ Switching to an index requires three fields together — `sec_type: "IND"`,
 based on `sec_type`. Strike spacing is *not* one of them: `snap_to_strike` reads
 the real chain, so SPY's $1 grid and SPX's $5 both work.
 
-`.env.jf.dev` supplies credentials and the two mode variables. It is gitignored;
+`env.dev` supplies credentials and the two mode variables. It is gitignored;
 `example.env` is the template.
 
 ---
@@ -91,11 +91,27 @@ account you did not intend.
 | Mode | Subscription | Can trade | Use |
 |---|---|---|---|
 | `replay` | none | **No — blocked in `OrderManager`** | Verifying the strategy against a past session |
-| `delayed` | none | No in practice — bars are ~15 min late | Watching the state machine against live-shaped data |
+| `delayed` | none | **Yes** — but bars are ~15 min late, so the entry limit is stale | Watching it run live, and paper trading without a subscription |
 | `realtime` | **required** | Yes | The only mode that can trade a live breakout |
 
 `reqRealTimeBars` has no delayed equivalent, which is why `realtime` needs a
-paid subscription. Selection happens in `bars/base.py::make_bar_source`; the
+paid subscription.
+
+**`replay` vs `delayed`** — the distinction that matters day to day:
+
+| | `replay` | `delayed` |
+|---|---|---|
+| Bars | One historical session, fetched once, fed through as fast as it can | Polled from IB every 30s, ~15 min behind live |
+| When | Any time — no market hours needed | Market hours only |
+| Session | `data.replay.date` | Always today |
+| Places orders | **No** — blocked in `OrderManager` | **Yes** |
+| For | "Did the logic work on this session?" | "Watch it run now, and trade it" |
+
+`delayed` **can** place real paper orders. Earlier notes called it
+"observation only"; that was advice, not enforcement — `can_trade` returns True
+for anything that is not `replay`. On a paper account with a human confirming
+every order the risk is nil, but the entry limit is priced off ~15-minute-old
+data, so treat a fill as a test of the mechanism rather than of the strategy. Selection happens in `bars/base.py::make_bar_source`; the
 state machine consumes an async bar stream and does not know the source.
 
 ---
@@ -183,7 +199,7 @@ Everything entering the strategies goes through it.
 ```bash
 make gateway-start && make gateway-vnc     # start Gateway, watch it log in
 make orb-replay                            # the correctness gate
-make orb-delayed                           # live-but-lagged, observation only
+make orb-delayed                           # live-but-lagged; CAN place a paper order
 make orb-live                              # needs a market data subscription
 make test                                  # suite, in the container
 ```

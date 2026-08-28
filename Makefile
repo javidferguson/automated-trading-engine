@@ -1,18 +1,23 @@
+# Variables
+COMPOSE_FILE := docker/docker-compose-options-trader.yml
+# Must match the env_file: entries in the compose file.
+ENV_FILE := env.dev
+
 # include env file
 #
-# The leading '-' matters: plain `include .env*` is a FATAL error when no file
-# matches, which silently breaks EVERY target in this file. The real env file
-# (.env.jf.dev) is gitignored, so a fresh clone has none until you run
-# `make setup` or `cp example.env .env.jf.dev`.
--include .env*
+# The leading '-' matters: a plain `include` is a FATAL error when the file is
+# missing, which silently breaks EVERY target here. env.dev is gitignored, so a
+# fresh clone has none until you run `make setup`.
+#
+# Include $(ENV_FILE) by name rather than a glob: the old `-include .env*`
+# pattern cannot match env.dev (no leading dot), and compose only *warns* on
+# unset interpolation -- so the Gateway would start with empty credentials and
+# just fail to log in, with nothing pointing at the cause.
+-include $(ENV_FILE)
 export
 # Makefile for Options Trading Microservice
 # Two-container setup: IB Gateway + Trading Application
 
-# Variables
-COMPOSE_FILE := docker/docker-compose-options-trader.yml
-# Must match the env_file: entry in the compose file.
-ENV_FILE := .env.jf.dev
 GATEWAY_SERVICE := ajj-ib-gateway
 TRADER_SERVICE := ajj-options-trader
 GATEWAY_WAIT_TIME := 60
@@ -200,8 +205,9 @@ orb-replay: ## Replay a past session through the engine (no orders, no subscript
 		python -m trading_engine.main --data-mode replay
 
 .PHONY: orb-delayed
-orb-delayed: ## Run against live-but-delayed data (observation only, no subscription)
-	@echo "$(YELLOW)Delayed data lags ~15 min -- observation only.$(NC)"
+orb-delayed: ## Run on live-but-delayed data (~15 min late; CAN place paper orders)
+	@echo "$(YELLOW)Delayed data lags ~15 min, so the entry limit is stale.$(NC)"
+	@echo "$(YELLOW)This CAN place a paper order -- you will be asked to confirm.$(NC)"
 	@docker-compose -f $(COMPOSE_FILE) run --rm -e DATA_MODE=delayed $(TRADER_SERVICE) \
 		python -m trading_engine.main --data-mode delayed
 

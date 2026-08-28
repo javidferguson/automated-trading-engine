@@ -5,7 +5,7 @@ services:
     container_name: ajj-ib-gateway
     env_file:
 #      - ../.env.local
-      - ../.env.jf.dev
+      - ../env.dev
     environment:
       # IB Account Credentials
       - TWS_USERID=${IB_USERNAME}
@@ -28,7 +28,7 @@ services:
       # container -- and you have no way to see a login dialog that is waiting
       # for input, which is exactly when you need it most.
       #
-      # Set VNC_PASSWORD in .env.jf.dev to enable. Both ports are bound to
+      # Set VNC_PASSWORD in env.dev to enable. Both ports are bound to
       # 127.0.0.1 only, so they are not exposed beyond this machine.
       - VNC_SERVER_PASSWORD=${VNC_PASSWORD:-}
 
@@ -113,7 +113,7 @@ services:
     container_name: ajj-options-trader
     env_file:
 #      - ../.env.local
-      - ../.env.jf.dev
+      - ../env.dev
     stdin_open: true  # Enable interactive CLI
     tty: true
 
@@ -128,8 +128,10 @@ services:
       - ../config:/app/config
       # Mount logs directory for persistence
       - ../logs:/app/logs
-      # Mount data directory for CSV exports
+      # Journals: data/journal/trades_YYYYMMDD.jsonl
       - ../data:/app/data
+      # Whole-repo mount. This overlays the two above, making them redundant --
+      # kept because it is what puts tests/ and scripts/ in the container.
       - ../:/app
 
     environment:
